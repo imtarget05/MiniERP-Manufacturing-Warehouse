@@ -1,0 +1,43 @@
+# ============================================================================
+# PROJECT: 04-MiniERP-Manufacturing-Warehouse
+# FILE:    docker-compose.yml
+# PURPOSE: Oracle Database Free container for the Mini ERP Warehouse/MES demo
+# ----------------------------------------------------------------------------
+# Image note:
+#   - Mặc định dùng `gvenzl/oracle-free:slim` (Oracle Database Free 23.x, ~850MB,
+#     nhân bản cộng đồng được Oracle ủy quyền, KHÔNG cần đăng nhập registry).
+#   - Nếu muốn dùng image chính thức của Oracle, đổi sang:
+#       image: container-registry.oracle.com/database/free:latest
+#     (bắt buộc `docker login container-registry.oracle.com` và accept license,
+#      biến môi trường của image này là ORACLE_PWD, không phải ORACLE_PASSWORD).
+#   - Image gvenzl đã có sẵn HEALTHCHECK; tham số `healthy` bên dưới dùng cho
+#     `docker compose ps` / `wait_healthy` trong scripts/bootstrap-db.sh.
+# ============================================================================
+
+services:
+  oracle-db:
+    image: gvenzl/oracle-free:slim
+    container_name: minierp-oracle
+    ports:
+      - "1521:1521"
+    environment:
+      # Mật khẩu của tài khoản SYS/SYSTEM (SYSTEM).
+      ORACLE_PASSWORD: ${ORACLE_PWD:-ErpPassword2026#}
+      # Tài khoản schema ứng dụng được image tự tạo trong PDB FREEPDB1.
+      APP_USER: ${APP_USER:-erp_user}
+      APP_USER_PASSWORD: ${APP_USER_PWD:-ErpPassword2026#}
+      ORACLE_CHARACTERSET: AL32UTF8
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+      # Mount thư mục SQL để scripts chạy trực tiếp bằng sqlplus bên trong container.
+      - ./sql:/sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  oracle_data:
