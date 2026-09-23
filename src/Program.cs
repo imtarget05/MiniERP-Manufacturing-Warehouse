@@ -19,8 +19,11 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 builder.Services.AddSingleton<ErpDbService>();
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
+
+app.UseCors();
 
 // ----------------------------------------------------------------- swagger
 app.UseSwagger();

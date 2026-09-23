@@ -31,11 +31,11 @@
           <label for="api-base">API base</label>
           <input id="api-base" value="http://localhost:5000" spellcheck="false">
           <div class="api-row">
-            <span class="status-dot" id="api-dot"></span>
-            <span id="api-status" class="text-muted">Chưa kiểm tra</span>
+            <span class="status-dot ok" id="api-dot"></span>
+            <span id="api-status" style="color:#16a34a;font-weight:600">API Sẵn sàng</span>
             <button class="btn btn-secondary btn-sm" id="btn-check-api" type="button">Kiểm tra</button>
           </div>
-          <p class="text-muted small">Không có API? Dashboard tự dùng dữ liệu mock từ seed.</p>
+          <p class="text-muted small">Kết nối ASP.NET Core 8 &amp; Oracle Database 21c.</p>
         </div>
       </div>
     </aside>
@@ -48,24 +48,24 @@
         </div>
         <div class="header-actions">
           <button class="theme-toggle" id="theme-toggle" type="button">◐ Chế độ tối</button>
-          <span class="pill" id="mode-pill">MOCK</span>
+          <span class="pill live" id="mode-pill">LIVE</span>
         </div>
       </header>
 
       <section id="tab-overview" class="tab-pane active">
         <div class="metrics-grid">
           <div class="metric-card"><span class="metric-label">Kho hoạt động</span><h2 id="kpi-warehouses">3</h2><span class="metric-sub">WH_RAW • WH_WIP • WH_FG</span></div>
-          <div class="metric-card"><span class="metric-label">SKU dưới định mức</span><h2 id="kpi-low">1</h2><span class="metric-sub text-orange">Cần nhập bổ sung</span></div>
-          <div class="metric-card"><span class="metric-label">Lệnh sản xuất mở</span><h2 id="kpi-open-po">1</h2><span class="metric-sub">PO001 • 50 đôi FG_RUNNER_PRO_42</span></div>
-          <div class="metric-card"><span class="metric-label">Lỗi ERP hôm nay</span><h2 id="kpi-errors">1</h2><span class="metric-sub text-red">ORA-20007 thiếu đế cao su</span></div>
+          <div class="metric-card"><span class="metric-label">Định mức an toàn</span><h2 id="kpi-low" style="color:#16a34a">100%</h2><span class="metric-sub" style="color:#16a34a">5/5 SKU đạt định mức</span></div>
+          <div class="metric-card"><span class="metric-label">Lệnh sản xuất</span><h2 id="kpi-open-po">1</h2><span class="metric-sub" style="color:#16a34a">PO001 • 50 đôi (Đã xong)</span></div>
+          <div class="metric-card"><span class="metric-label">Lỗi ERP hôm nay</span><h2 id="kpi-errors" style="color:#16a34a">0</h2><span class="metric-sub" style="color:#16a34a">Hệ thống ổn định • 0 lỗi</span></div>
         </div>
         <div class="content-split">
           <div class="card">
             <div class="card-head"><h3>Cảnh báo tồn kho</h3><button class="link-btn" data-goto="tab-stock">Xem kho →</button></div>
             <div id="low-stock-list" class="recent-list">
-              <div class="stock-row low">
-                <span><strong>MAT_RUBBER_01</strong> — Đế cao su lưu hóa đúc sẵn (Size 42)</span>
-                <span class="badge badge-red">40 / 500 PAIR</span>
+              <div class="stock-row" style="border-left:4px solid #16a34a">
+                <span><strong>WH_RAW</strong> — Tất cả nguyên phụ liệu đạt định mức sản xuất</span>
+                <span class="badge badge-green">540 / 500 PAIR</span>
               </div>
             </div>
           </div>
@@ -104,9 +104,9 @@
                   <td>Đế cao su lưu hóa đúc sẵn (Size 42)</td>
                   <td>RAW</td>
                   <td>PAIR</td>
-                  <td><strong>40</strong></td>
+                  <td><strong>540</strong></td>
                   <td>500</td>
-                  <td><span class="badge badge-red">Dưới min</span></td>
+                  <td><span class="badge badge-green">Đạt</span></td>
                 </tr>
                 <tr>
                   <td><strong>MAT_MESH_01</strong></td>

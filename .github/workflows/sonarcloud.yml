@@ -46,17 +46,19 @@ jobs:
             /o:"imtarget05" \
             /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
             /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.projectBaseDir="${{ github.workspace }}" \
             /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
             /d:sonar.exclusions="**/bin/**,**/obj/**,**/migrations/**" \
             /d:sonar.test.exclusions="**/bin/**,**/obj/**"
 
-      - name: Build
-        run: dotnet build src/MiniERP.Api.csproj -c Release -p:NuGetAudit=false --no-restore
+      - name: Build Solution
+        run: dotnet build tests/MiniERP.Api.Tests/MiniERP.Api.Tests.csproj -c Release -p:NuGetAudit=false --no-restore
 
       - name: Run unit tests with coverage
         run: |
           dotnet test tests/MiniERP.Api.Tests/MiniERP.Api.Tests.csproj \
             -c Release \
+            --no-build \
             --no-restore \
             --filter "Category!=Integration" \
             --collect:"XPlat Code Coverage" \

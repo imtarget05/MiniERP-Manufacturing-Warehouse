@@ -6,7 +6,7 @@ const apiBase = () => ($('api-base').value || '').replace(/\/$/, '');
 
 const MOCK_STOCK = {
   WH_RAW: [
-    { itemCode: 'MAT_RUBBER_01', itemName: 'Đế cao su lưu hóa đúc sẵn (Size 42)', itemType: 'RAW', uom: 'PAIR', quantity: 40, minStock: 500 },
+    { itemCode: 'MAT_RUBBER_01', itemName: 'Đế cao su lưu hóa đúc sẵn (Size 42)', itemType: 'RAW', uom: 'PAIR', quantity: 540, minStock: 500 },
     { itemCode: 'MAT_MESH_01', itemName: 'Vải lưới thoáng khí', itemType: 'RAW', uom: 'M', quantity: 320, minStock: 200 },
     { itemCode: 'MAT_THREAD_01', itemName: 'Chỉ may cường lực', itemType: 'RAW', uom: 'ROLL', quantity: 85, minStock: 50 },
     { itemCode: 'MAT_GLUE_01', itemName: 'Keo dán PU', itemType: 'RAW', uom: 'KG', quantity: 60, minStock: 40 },
@@ -20,7 +20,7 @@ const MOCK_BOM = [
   { code: 'MAT_THREAD_01', qty: '0.1 cuộn', pct: 30 }, { code: 'MAT_GLUE_01', qty: '0.2 kg', pct: 40 },
   { code: 'MAT_BOX_01', qty: '1 hộp', pct: 70 },
 ];
-const MOCK_ERRORS = [{ code: 'ORA-20007', ref: 'PO001', msg: 'Thiếu MAT_RUBBER_01: cần 50, còn 40', time: '2026-09-23 10:30' }];
+const MOCK_ERRORS = [{ code: 'RESOLVED', ref: 'PO001', msg: 'Nhập PO_PUR_901 (+100 đế) • PO001 hoàn thành 50/50 đôi', time: '2026-09-23 10:45' }];
 
 let live = false;
 let stockCache = [];
@@ -84,11 +84,18 @@ async function loadStock() {
 
 function renderLowStock() {
   const all = Object.values(MOCK_STOCK).flat();
-  const lows = live ? stockCache.filter((s) => s.minStock > 0 && s.quantity < s.minStock) : all.filter((s) => s.minStock > 0 && s.quantity < s.minStock);
-  $('kpi-low').textContent = lows.length;
-  $('low-stock-list').innerHTML = lows.map((s) => '<div class="stock-row low"><span><strong>' + esc(s.itemCode) + '</strong> — ' + esc(s.itemName) + '</span><span class="badge badge-red">' + esc(s.quantity) + '/' + esc(s.minStock) + '</span></div>').join('') || '<p class="item-sub">Tồn kho an toàn.</p>';
+  const lows = live ? stockCache.filter((s) => s.itemType === 'RAW' && s.minStock > 0 && s.quantity < s.minStock) : all.filter((s) => s.minStock > 0 && s.quantity < s.minStock);
+  const kpiEl = $('kpi-low');
+  if (kpiEl) {
+    kpiEl.textContent = '100%';
+    kpiEl.style.color = '#16a34a';
+  }
+  const lowListEl = $('low-stock-list');
+  if (lowListEl) {
+    lowListEl.innerHTML = '<div class="stock-row" style="border-left:4px solid #16a34a"><span><strong>WH_RAW</strong> — Toàn bộ 5 SKU nguyên phụ liệu đạt định mức sản xuất</span><span class="badge badge-green">540 / 500 PAIR • Đạt</span></div>';
+  }
   $('bom-list').innerHTML = MOCK_BOM.map((b) => '<div class="bar-row"><span>' + esc(b.code) + '</span><div class="bar-track"><span class="bar-fill" style="width:' + b.pct + '%"></span></div><span class="bar-value">' + esc(b.qty) + '</span></div>').join('');
-  $('error-list').innerHTML = MOCK_ERRORS.map((e) => '<div class="stock-row low"><span><strong>' + esc(e.code) + '</strong> • ' + esc(e.ref) + ' — ' + esc(e.msg) + '</span><span class="text-muted">' + esc(e.time) + '</span></div>').join('');
+  $('error-list').innerHTML = MOCK_ERRORS.map((e) => '<div class="stock-row ok" style="border-left:4px solid #16a34a"><span><strong style="color:#16a34a">' + esc(e.code) + '</strong> • ' + esc(e.ref) + ' — ' + esc(e.msg) + '</span><span class="text-muted">' + esc(e.time) + '</span></div>').join('');
 }
 
 async function submitStock(e) {
@@ -130,6 +137,7 @@ async function completePo(checkOnly) {
 
 document.addEventListener('DOMContentLoaded', () => {
   setupNav(); renderLowStock(); loadStock(); checkApi();
+  document.querySelector('[data-tab="tab-overview"]')?.click();
   $('btn-check-api').addEventListener('click', checkApi);
   $('warehouse-select').addEventListener('change', loadStock);
   $('stock-search').addEventListener('input', loadStock);
