@@ -55,18 +55,97 @@
       <section id="tab-overview" class="tab-pane active">
         <div class="metrics-grid">
           <div class="metric-card"><span class="metric-label">Kho hoạt động</span><h2 id="kpi-warehouses">3</h2><span class="metric-sub">WH_RAW • WH_WIP • WH_FG</span></div>
-          <div class="metric-card"><span class="metric-label">SKU dưới định mức</span><h2 id="kpi-low">0</h2><span class="metric-sub text-orange">Cần nhập bổ sung</span></div>
+          <div class="metric-card"><span class="metric-label">SKU dưới định mức</span><h2 id="kpi-low">1</h2><span class="metric-sub text-orange">Cần nhập bổ sung</span></div>
           <div class="metric-card"><span class="metric-label">Lệnh sản xuất mở</span><h2 id="kpi-open-po">1</h2><span class="metric-sub">PO001 • 50 đôi FG_RUNNER_PRO_42</span></div>
           <div class="metric-card"><span class="metric-label">Lỗi ERP hôm nay</span><h2 id="kpi-errors">1</h2><span class="metric-sub text-red">ORA-20007 thiếu đế cao su</span></div>
         </div>
         <div class="content-split">
           <div class="card">
             <div class="card-head"><h3>Cảnh báo tồn kho</h3><button class="link-btn" data-goto="tab-stock">Xem kho →</button></div>
-            <div id="low-stock-list" class="recent-list"></div>
+            <div id="low-stock-list" class="recent-list">
+              <div class="stock-row low">
+                <span><strong>MAT_RUBBER_01</strong> — Đế cao su lưu hóa đúc sẵn (Size 42)</span>
+                <span class="badge badge-red">40 / 500 PAIR</span>
+              </div>
+            </div>
           </div>
           <div class="card">
             <div class="card-head"><h3>Định mức BOM — FG_RUNNER_PRO_42</h3><button class="link-btn" data-goto="tab-mfg">Chi tiết →</button></div>
-            <div id="bom-list" class="bar-chart"></div>
+            <div id="bom-list" class="bar-chart">
+              <div class="bar-row"><span>MAT_RUBBER_01</span><div class="bar-track"><span class="bar-fill" style="width:100%"></span></div><span class="bar-value">1 đôi</span></div>
+              <div class="bar-row"><span>MAT_MESH_01</span><div class="bar-track"><span class="bar-fill" style="width:55%"></span></div><span class="bar-value">0.5 m</span></div>
+              <div class="bar-row"><span>MAT_THREAD_01</span><div class="bar-track"><span class="bar-fill" style="width:30%"></span></div><span class="bar-value">0.1 cuộn</span></div>
+              <div class="bar-row"><span>MAT_GLUE_01</span><div class="bar-track"><span class="bar-fill" style="width:40%"></span></div><span class="bar-value">0.2 kg</span></div>
+              <div class="bar-row"><span>MAT_BOX_01</span><div class="bar-track"><span class="bar-fill" style="width:70%"></span></div><span class="bar-value">1 hộp</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:18px">
+          <div class="card-head">
+            <h3>Tồn kho tức thời — Kho Nguyên phụ liệu (WH_RAW)</h3>
+            <span class="card-hint">Đồng bộ từ Package ERP_OPERATIONS &amp; ERP_AUTOMATION</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mã VT</th>
+                  <th>Tên vật tư</th>
+                  <th>Loại</th>
+                  <th>ĐVT</th>
+                  <th>Tồn kho</th>
+                  <th>Định mức Min</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody id="overview-stock-tbody">
+                <tr>
+                  <td><strong>MAT_RUBBER_01</strong></td>
+                  <td>Đế cao su lưu hóa đúc sẵn (Size 42)</td>
+                  <td>RAW</td>
+                  <td>PAIR</td>
+                  <td><strong>40</strong></td>
+                  <td>500</td>
+                  <td><span class="badge badge-red">Dưới min</span></td>
+                </tr>
+                <tr>
+                  <td><strong>MAT_MESH_01</strong></td>
+                  <td>Vải lưới thoáng khí</td>
+                  <td>RAW</td>
+                  <td>M</td>
+                  <td><strong>500</strong></td>
+                  <td>200</td>
+                  <td><span class="badge badge-green">Đạt</span></td>
+                </tr>
+                <tr>
+                  <td><strong>MAT_THREAD_01</strong></td>
+                  <td>Chỉ may cường lực</td>
+                  <td>RAW</td>
+                  <td>ROLL</td>
+                  <td><strong>200</strong></td>
+                  <td>50</td>
+                  <td><span class="badge badge-green">Đạt</span></td>
+                </tr>
+                <tr>
+                  <td><strong>MAT_GLUE_01</strong></td>
+                  <td>Keo dán PU</td>
+                  <td>RAW</td>
+                  <td>KG</td>
+                  <td><strong>100</strong></td>
+                  <td>40</td>
+                  <td><span class="badge badge-green">Đạt</span></td>
+                </tr>
+                <tr>
+                  <td><strong>MAT_BOX_01</strong></td>
+                  <td>Hộp carton xuất khẩu</td>
+                  <td>RAW</td>
+                  <td>PCS</td>
+                  <td><strong>600</strong></td>
+                  <td>500</td>
+                  <td><span class="badge badge-green">Đạt</span></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
