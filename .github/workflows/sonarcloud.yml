@@ -1,0 +1,66 @@
+name: SonarCloud Analysis
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: sonar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sonarcloud:
+    name: SonarCloud (.NET 8 + C#)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Full history needed for blame/new-code detection
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Java 17 (required by SonarScanner)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dotnet-sonarscanner
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Restore dependencies
+        run: dotnet restore tests/MiniERP.Api.Tests/MiniERP.Api.Tests.csproj
+
+      - name: SonarCloud — Begin
+        run: |
+          dotnet sonarscanner begin \
+            /k:"imtarget05_MiniERP-Manufacturing-Warehouse" \
+            /o:"imtarget05" \
+            /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
+            /d:sonar.exclusions="**/bin/**,**/obj/**,**/migrations/**" \
+            /d:sonar.test.exclusions="**/bin/**,**/obj/**"
+
+      - name: Build
+        run: dotnet build src/MiniERP.Api.csproj -c Release -p:NuGetAudit=false --no-restore
+
+      - name: Run unit tests with coverage
+        run: |
+          dotnet test tests/MiniERP.Api.Tests/MiniERP.Api.Tests.csproj \
+            -c Release \
+            --no-restore \
+            --filter "Category!=Integration" \
+            --collect:"XPlat Code Coverage" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+      - name: SonarCloud — End
+        run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
