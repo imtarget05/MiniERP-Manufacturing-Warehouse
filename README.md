@@ -5,6 +5,7 @@
 [![Platform](https://img.shields.io/badge/.NET-8.0-purple.svg)](https://dotnet.microsoft.com/)
 [![Database](https://img.shields.io/badge/Database-Oracle%2019c%2F21c-red.svg)](https://www.oracle.com/database/)
 [![Language](https://img.shields.io/badge/Language-C%23%20%7C%20PL%2FSQL-blue.svg)]()
+[![CI/CD Pipeline](https://github.com/imtarget05/MiniERP-Manufacturing-Warehouse/actions/workflows/ci.yml/badge.svg)](https://github.com/imtarget05/MiniERP-Manufacturing-Warehouse/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/Integration%20Tests-56%2F56%20Passing-success.svg)]()
 [![Target](https://img.shields.io/badge/Target-Industrial%20KCN%20ERP-orange.svg)]()
 

@@ -6,6 +6,562 @@
     "version": "v1"
   },
   "paths": {
+    "/api/automation/production-order/{poNo}/material-check": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "MaterialCheck",
+        "parameters": [
+          {
+            "name": "poNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/production-order/{poNo}/reserve": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "ReserveMaterials",
+        "parameters": [
+          {
+            "name": "poNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/production-order/{poNo}/release": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "ReleaseReservations",
+        "parameters": [
+          {
+            "name": "poNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/production-order/{poNo}/complete": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "CompleteReservedOrder",
+        "parameters": [
+          {
+            "name": "poNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/replenishment/evaluate": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "EvaluateReplenishment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplenishmentEvalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/replenishment/sweep": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "SweepReplenishment",
+        "parameters": [
+          {
+            "name": "user",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/replenishment/alerts": {
+      "get": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "GetReplenishAlerts",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/stale-orders/detect": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "DetectStaleOrders",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/stale-orders": {
+      "get": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "GetStaleOrders",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/reports/{reportType}": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "GenerateReport",
+        "parameters": [
+          {
+            "name": "reportType",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/reports": {
+      "get": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "GetReports",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "withPayload",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/runs": {
+      "get": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "GetAutomationRuns",
+        "parameters": [
+          {
+            "name": "workflow",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/incidents": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "CollectIncidentContext",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectIncidentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "GetIncidents",
+        "parameters": [
+          {
+            "name": "refNo",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/approvals": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "RequestApproval",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "GetApprovals",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/approvals/{approvalNo}/decision": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "DecideApproval",
+        "parameters": [
+          {
+            "name": "approvalNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/automation/stock/adjust": {
+      "post": {
+        "tags": [
+          "Automation"
+        ],
+        "operationId": "AdjustStock",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjustStockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
     "/api/support/errors": {
       "get": {
         "tags": [
@@ -414,6 +970,32 @@
   },
   "components": {
     "schemas": {
+      "AdjustStockRequest": {
+        "type": "object",
+        "properties": {
+          "warehouseCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "itemCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "quantityDelta": {
+            "type": "number",
+            "format": "double"
+          },
+          "approvalNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "user": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "BomLineRequest": {
         "type": "object",
         "properties": {
@@ -440,6 +1022,28 @@
         },
         "additionalProperties": false
       },
+      "CollectIncidentRequest": {
+        "type": "object",
+        "properties": {
+          "referenceNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "errorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "user": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "CompleteProductionOrderResponse": {
         "type": "object",
         "properties": {
@@ -455,6 +1059,32 @@
             "nullable": true
           },
           "message": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateApprovalRequest": {
+        "type": "object",
+        "properties": {
+          "approvalNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "action": {
+            "type": "string",
+            "nullable": true
+          },
+          "referenceNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "payload": {
+            "type": "string",
+            "nullable": true
+          },
+          "requester": {
             "type": "string",
             "nullable": true
           }
@@ -543,6 +1173,20 @@
         },
         "additionalProperties": false
       },
+      "DecideApprovalRequest": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "nullable": true
+          },
+          "approver": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ErpErrorResponse": {
         "type": "object",
         "properties": {
@@ -570,6 +1214,28 @@
             "nullable": true
           },
           "action": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReplenishmentEvalRequest": {
+        "type": "object",
+        "properties": {
+          "itemCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "warehouseCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "trigger": {
+            "type": "string",
+            "nullable": true
+          },
+          "user": {
             "type": "string",
             "nullable": true
           }
