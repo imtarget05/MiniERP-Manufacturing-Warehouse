@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="MiniERP Manufacturing & Warehouse — dashboard vận hành kho, BOM, lệnh sản xuất, sự cố PO001">
+  <title>MiniERP — Manufacturing & Warehouse Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo-icon" aria-hidden="true">ERP</div>
+        <div class="brand-text">
+          <h2>MINI ERP</h2>
+          <span>MFG & Warehouse Ops</span>
+        </div>
+      </div>
+      <nav class="nav-menu" aria-label="Điều hướng">
+        <button class="nav-item active" data-tab="tab-overview">Tổng quan</button>
+        <button class="nav-item" data-tab="tab-stock">Kho &amp; Tồn kho</button>
+        <button class="nav-item" data-tab="tab-mfg">Sản xuất &amp; BOM</button>
+        <button class="nav-item" data-tab="tab-incident">Sự cố PO001</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="api-box">
+          <label for="api-base">API base</label>
+          <input id="api-base" value="http://localhost:5000" spellcheck="false">
+          <div class="api-row">
+            <span class="status-dot" id="api-dot"></span>
+            <span id="api-status" class="text-muted">Chưa kiểm tra</span>
+            <button class="btn btn-secondary btn-sm" id="btn-check-api" type="button">Kiểm tra</button>
+          </div>
+          <p class="text-muted small">Không có API? Dashboard tự dùng dữ liệu mock từ seed.</p>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-header">
+        <div>
+          <h1 id="page-title">Tổng quan vận hành</h1>
+          <div class="breadcrumb">MiniERP / TKG Taekwang / <span id="breadcrumb-tab">Tổng quan</span></div>
+        </div>
+        <div class="header-actions">
+          <button class="theme-toggle" id="theme-toggle" type="button">◐ Chế độ tối</button>
+          <span class="pill" id="mode-pill">MOCK</span>
+        </div>
+      </header>
+
+      <section id="tab-overview" class="tab-pane active">
+        <div class="metrics-grid">
+          <div class="metric-card"><span class="metric-label">Kho hoạt động</span><h2 id="kpi-warehouses">3</h2><span class="metric-sub">WH_RAW • WH_WIP • WH_FG</span></div>
+          <div class="metric-card"><span class="metric-label">SKU dưới định mức</span><h2 id="kpi-low">0</h2><span class="metric-sub text-orange">Cần nhập bổ sung</span></div>
+          <div class="metric-card"><span class="metric-label">Lệnh sản xuất mở</span><h2 id="kpi-open-po">1</h2><span class="metric-sub">PO001 • 50 đôi FG_RUNNER_PRO_42</span></div>
+          <div class="metric-card"><span class="metric-label">Lỗi ERP hôm nay</span><h2 id="kpi-errors">1</h2><span class="metric-sub text-red">ORA-20007 thiếu đế cao su</span></div>
+        </div>
+        <div class="content-split">
+          <div class="card">
+            <div class="card-head"><h3>Cảnh báo tồn kho</h3><button class="link-btn" data-goto="tab-stock">Xem kho →</button></div>
+            <div id="low-stock-list" class="recent-list"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Định mức BOM — FG_RUNNER_PRO_42</h3><button class="link-btn" data-goto="tab-mfg">Chi tiết →</button></div>
+            <div id="bom-list" class="bar-chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-stock" class="tab-pane">
+        <div class="section-toolbar">
+          <select id="warehouse-select" class="filter-select" aria-label="Chọn kho">
+            <option value="WH_RAW">WH_RAW — Kho Nguyên phụ liệu</option>
+            <option value="WH_WIP">WH_WIP — Kho Bán thành phẩm</option>
+            <option value="WH_FG">WH_FG — Kho Thành phẩm XK</option>
+          </select>
+          <input id="stock-search" class="search-input" placeholder="Tìm vật tư theo mã / tên..." aria-label="Tìm vật tư">
+          <div class="toolbar-actions">
+            <button class="btn btn-secondary" id="btn-reload-stock" type="button">Tải lại</button>
+            <button class="btn btn-primary" id="btn-open-in" type="button">+ Nhập kho</button>
+            <button class="btn btn-secondary" id="btn-open-out" type="button">− Xuất kho</button>
+          </div>
+        </div>
+        <div class="list-meta"><span id="stock-count">—</span></div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead><tr><th>Mã VT</th><th>Tên vật tư</th><th>Loại</th><th>ĐVT</th><th>Tồn</th><th>Min</th><th>Trạng thái</th></tr></thead>
+            <tbody id="stock-tbody"></tbody>
+          </table>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><h3>Nhập / Xuất kho nhanh</h3><span class="card-hint">POST /api/stock/in • /api/stock/out</span></div>
+          <form id="stock-form" class="form-grid">
+            <div class="form-group"><label>Kiểu</label><select id="s-type"><option value="in">Nhập kho</option><option value="out">Xuất kho</option></select></div>
+            <div class="form-group"><label>Mã vật tư</label><input id="s-item" value="MAT_RUBBER_01" required></div>
+            <div class="form-group"><label>Số lượng</label><input id="s-qty" type="number" min="1" value="100" required></div>
+            <div class="form-group"><label>Tham chiếu</label><input id="s-ref" value="PO_PUR_901"></div>
+            <div class="modal-actions" style="border:none;padding:0;margin:0"><button class="btn btn-primary" type="submit">Ghi nhận</button></div>
+          </form>
+          <p id="stock-msg" class="form-hint"></p>
+        </div>
+      </section>
+
+      <section id="tab-mfg" class="tab-pane">
+        <div class="content-split">
+          <div class="card">
+            <div class="card-head"><h3>Lệnh sản xuất PO001</h3><span class="badge badge-orange" id="po-status">RELEASED</span></div>
+            <p class="item-sub">50 đôi FG_RUNNER_PRO_42 • BOM V1.0 • Atomic complete (pre-flight check toàn bộ NVL)</p>
+            <div class="modal-actions" style="justify-content:flex-start">
+              <button class="btn btn-secondary" id="btn-check-material" type="button">1. Kiểm tra vật tư</button>
+              <button class="btn btn-primary" id="btn-complete-po" type="button">2. Hoàn thành PO</button>
+            </div>
+            <p id="mfg-msg" class="form-hint"></p>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Nhật ký lỗi ERP</h3><span class="card-hint">GET /api/support/errors</span></div>
+            <div id="error-list" class="recent-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-incident" class="tab-pane">
+        <div class="card">
+          <div class="card-head"><h3>Runbook sự cố PO001 — ORA-20007</h3><span class="card-hint">sql/04_incident_scenarios.sql</span></div>
+          <ol class="timeline">
+            <li><strong>Sự cố:</strong> Complete PO001 (50 đôi) thất bại — kho chỉ còn 40 cặp đế <code>MAT_RUBBER_01</code>.</li>
+            <li><strong>Điều tra:</strong> tra <code>ERROR_LOG</code> (autonomous transaction), đối chiếu BOM vs STOCK.</li>
+            <li><strong>Quy trình:</strong> lập <code>CHANGE_REQUEST CR-2026-0901</code> ghi RCA.</li>
+            <li><strong>Xử lý:</strong> nhập bổ sung 100 đế từ <code>PO_PUR_901</code> (form Kho &amp; Tồn).</li>
+            <li><strong>Nghiệm thu:</strong> chạy lại Complete PO → <code>COMPLETED</code>, tồn FG +50.</li>
+          </ol>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

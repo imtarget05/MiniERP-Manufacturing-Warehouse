@@ -22,3 +22,14 @@ node_modules/
 
 # === Oracle data (khong bao gio commit) ===
 **/oradata/
+
+# === test evidence: keep swagger.json, ignore raw run logs ===
+artifacts/*.log
+artifacts/api.log
+!**/artifacts/swagger.json
+
+# === IDE / test output ===
+TestResults/
+*.trx
+.vs/
+.idea/

@@ -129,12 +129,28 @@ VALUES (
   SYSDATE
 );
 
--- Record Initial Transactions
-INSERT INTO INVENTORY_TRANSACTION (TXN_TYPE, ITEM_ID, WAREHOUSE_ID, QTY, BALANCE_AFTER, REF_NO, CREATED_BY)
-VALUES ('STOCK_IN', (SELECT ID FROM ITEM WHERE CODE = 'MAT_RUBBER_01'), (SELECT ID FROM WAREHOUSE WHERE CODE = 'WH_RAW'), 40, 40, 'INIT_BALANCE', 'admin');
-
-INSERT INTO INVENTORY_TRANSACTION (TXN_TYPE, ITEM_ID, WAREHOUSE_ID, QTY, BALANCE_AFTER, REF_NO, CREATED_BY)
-VALUES ('STOCK_IN', (SELECT ID FROM ITEM WHERE CODE = 'MAT_MESH_01'), (SELECT ID FROM WAREHOUSE WHERE CODE = 'WH_RAW'), 500, 500, 'INIT_BALANCE', 'admin');
+-- Record Initial Transactions (opening balances)
+-- One STOCK_IN ledger row per seeded STOCK row, so the audit trail always
+-- reconciles with the stock balance: STOCK.QTY = SUM(INVENTORY_TRANSACTION.QTY).
+DECLARE
+  v_txn_cnt NUMBER := 0;
+BEGIN
+  FOR r IN (SELECT s.WAREHOUSE_ID, s.ITEM_ID, s.QTY
+              FROM STOCK s
+             WHERE NOT EXISTS (SELECT 1 FROM INVENTORY_TRANSACTION t
+                                WHERE t.WAREHOUSE_ID = s.WAREHOUSE_ID
+                                  AND t.ITEM_ID = s.ITEM_ID))
+  LOOP
+    INSERT INTO INVENTORY_TRANSACTION
+      (TXN_TYPE, ITEM_ID, WAREHOUSE_ID, QTY, BALANCE_AFTER, REF_NO, CREATED_BY)
+    VALUES
+      ('STOCK_IN', r.ITEM_ID, r.WAREHOUSE_ID, r.QTY, r.QTY, 'INIT_BALANCE', 'admin');
+    v_txn_cnt := v_txn_cnt + SQL%ROWCOUNT;
+  END LOOP;
+  DBMS_OUTPUT.PUT_LINE('>>> Opening-balance transactions created: ' || v_txn_cnt);
+  COMMIT;
+END;
+/
 
 -- 5. ERP Users & Roles
 INSERT INTO ERP_ROLE (NAME) VALUES ('ERP_ADMIN');
@@ -165,5 +181,23 @@ VALUES (
   (SELECT ID FROM APP_USER WHERE USERNAME = 'planner01'),
   (SELECT ID FROM ERP_ROLE WHERE NAME = 'PRODUCTION_PLANNER')
 );
+
+COMMIT;
+
+-- 6. Replenishment parameters for the automation layer (ERP_AUTOMATION W3
+--    rule engine: suggested = ADU * lead_days + safety - available).
+--    Must run AFTER the ITEM INSERTs above; idempotent MERGE.
+MERGE INTO ITEM t
+USING (SELECT 'MAT_RUBBER_01' AS CODE, 500 AS RP, 50 AS SS, 30 AS ADU, 7 AS LT FROM DUAL UNION ALL
+       SELECT 'MAT_MESH_01',   200, 20, 15, 5 FROM DUAL UNION ALL
+       SELECT 'MAT_THREAD_01', 100, 10,  8, 3 FROM DUAL UNION ALL
+       SELECT 'MAT_GLUE_01',    50,  5,  4, 3 FROM DUAL UNION ALL
+       SELECT 'MAT_BOX_01',    500, 50, 40, 2 FROM DUAL) s
+ON (t.CODE = s.CODE)
+WHEN MATCHED THEN UPDATE
+  SET t.REORDER_POINT   = s.RP,
+      t.SAFETY_STOCK    = s.SS,
+      t.AVG_DAILY_USAGE = s.ADU,
+      t.LEAD_TIME_DAYS  = s.LT;
 
 COMMIT;

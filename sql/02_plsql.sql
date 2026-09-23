@@ -315,7 +315,7 @@ CREATE OR REPLACE PACKAGE BODY ERP_OPERATIONS AS
     v_po_id       NUMBER;
     v_fg_id       NUMBER;
     v_planned_qty NUMBER;
-    v_status      VARCHAR2(15);
+    v_status      VARCHAR2(20);
     v_wh_id       NUMBER;
     v_bom_id      NUMBER;
     v_shortage    BOOLEAN := FALSE;
@@ -468,7 +468,7 @@ CREATE OR REPLACE PACKAGE BODY ERP_OPERATIONS AS
     v_item_id NUMBER;
     v_qty     NUMBER;
     v_wh_id   NUMBER;
-    v_status  VARCHAR2(15);
+    v_status  VARCHAR2(20);
     v_new_bal NUMBER;
   BEGIN
     SELECT ITEM_ID, QTY, WAREHOUSE_ID, STATUS

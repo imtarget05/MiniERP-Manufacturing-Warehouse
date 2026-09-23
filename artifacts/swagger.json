@@ -1,0 +1,633 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Mini ERP API — Manufacturing & Warehouse Execution",
+    "description": "Core REST API connecting ASP.NET Core (.NET 8) to Oracle Database 19c/21c/23c through the PL/SQL package ERP_OPERATIONS (Dapper micro-ORM).",
+    "version": "v1"
+  },
+  "paths": {
+    "/api/support/errors": {
+      "get": {
+        "tags": [
+          "ERP Support"
+        ],
+        "operationId": "GetErrorLogs",
+        "parameters": [
+          {
+            "name": "refNo",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/support/change-requests": {
+      "post": {
+        "tags": [
+          "ERP Support"
+        ],
+        "operationId": "CreateChangeRequest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/support/change-requests/{crNo}": {
+      "get": {
+        "tags": [
+          "ERP Support"
+        ],
+        "operationId": "GetChangeRequest",
+        "parameters": [
+          {
+            "name": "crNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/manufacturing/bom/line": {
+      "post": {
+        "tags": [
+          "Manufacturing"
+        ],
+        "operationId": "SaveBomLine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BomLineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/manufacturing/production-order": {
+      "post": {
+        "tags": [
+          "Manufacturing"
+        ],
+        "operationId": "CreateProductionOrder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductionOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/manufacturing/production-order/{poNo}": {
+      "get": {
+        "tags": [
+          "Manufacturing"
+        ],
+        "operationId": "GetProductionOrder",
+        "parameters": [
+          {
+            "name": "poNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/manufacturing/production-order/{poNo}/complete": {
+      "post": {
+        "tags": [
+          "Manufacturing"
+        ],
+        "operationId": "CompleteProductionOrder",
+        "parameters": [
+          {
+            "name": "poNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteProductionOrderResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manufacturing/production-order/{poNo}/cancel": {
+      "post": {
+        "tags": [
+          "Manufacturing"
+        ],
+        "operationId": "CancelProductionOrder",
+        "parameters": [
+          {
+            "name": "poNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/procurement/purchase-order": {
+      "post": {
+        "tags": [
+          "Procurement"
+        ],
+        "operationId": "CreatePurchaseOrder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePurchaseOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/procurement/purchase-order/{poNo}/receive": {
+      "post": {
+        "tags": [
+          "Procurement"
+        ],
+        "operationId": "ReceivePurchaseOrder",
+        "parameters": [
+          {
+            "name": "poNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "Support"
+        ],
+        "operationId": "Health",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/warehouse": {
+      "get": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "GetWarehouses",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/stock/{warehouseCode}": {
+      "get": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "GetStockByWarehouse",
+        "parameters": [
+          {
+            "name": "warehouseCode",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/stock/in": {
+      "post": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "StockIn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock/out": {
+      "post": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "StockOut",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockOutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BomLineRequest": {
+        "type": "object",
+        "properties": {
+          "finishedGoodCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "version": {
+            "type": "string",
+            "nullable": true
+          },
+          "materialCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "quantityRequired": {
+            "type": "number",
+            "format": "double"
+          },
+          "user": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CompleteProductionOrderResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "productionOrderNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateChangeRequest": {
+        "type": "object",
+        "properties": {
+          "changeRequestNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestType": {
+            "type": "string",
+            "nullable": true
+          },
+          "referenceNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "rootCause": {
+            "type": "string",
+            "nullable": true
+          },
+          "fixAction": {
+            "type": "string",
+            "nullable": true
+          },
+          "requester": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateProductionOrderRequest": {
+        "type": "object",
+        "properties": {
+          "productionOrderNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "finishedGoodCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "plannedQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "user": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatePurchaseOrderRequest": {
+        "type": "object",
+        "properties": {
+          "purchaseOrderNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "itemCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "warehouseCode": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ErpErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "errorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "businessCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "procedureName": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "referenceNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "action": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "StockInRequest": {
+        "type": "object",
+        "properties": {
+          "warehouseCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "itemCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "referenceNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "user": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "StockOutRequest": {
+        "type": "object",
+        "properties": {
+          "warehouseCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "itemCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "referenceNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "user": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

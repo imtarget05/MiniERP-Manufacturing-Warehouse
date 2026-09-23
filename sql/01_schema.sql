@@ -2,15 +2,26 @@
 -- PROJECT: 04-MiniERP-Manufacturing-Warehouse
 -- FILE: sql/01_schema.sql
 -- TARGET: Oracle Database 19c / 21c / 23c
--- DESCRIPTION: Core schema for Mini ERP Warehouse & Manufacturing modules
+-- DESCRIPTION: Core schema for Mini ERP Warehouse & Manufacturing modules.
+--              Base tables (13): WAREHOUSE, ITEM, STOCK, BOM, BOM_DETAIL,
+--              PRODUCTION_ORDER, PURCHASE_ORDER, INVENTORY_TRANSACTION,
+--              APP_USER, ERP_ROLE, USER_ROLE, ERROR_LOG, CHANGE_REQUEST.
+--              The ERP automation extension lives in sql/05_automation_schema.sql
+--              and must be applied *after* this file (see scripts/run-sql.sh):
+--                01_schema -> 05_automation_schema -> 02_plsql
+--                -> 06_automation_plsql -> 03_seed (-> 04_incident_scenarios)
 -- ============================================================================
 
--- Clean up existing tables safely if re-running
+-- Clean up existing tables safely if re-running (13 base tables + the 7
+-- automation tables owned by sql/05_automation_schema.sql)
 BEGIN
   FOR t IN (SELECT table_name FROM user_tables WHERE table_name IN (
     'CHANGE_REQUEST', 'ERROR_LOG', 'USER_ROLE', 'ERP_ROLE', 'APP_USER',
     'INVENTORY_TRANSACTION', 'PURCHASE_ORDER', 'PRODUCTION_ORDER',
-    'BOM_DETAIL', 'BOM', 'STOCK', 'ITEM', 'WAREHOUSE'
+    'BOM_DETAIL', 'BOM', 'STOCK', 'ITEM', 'WAREHOUSE',
+    'STOCK_RESERVATION', 'REPLENISH_ALERT', 'ERP_AUTOMATION_RUN',
+    'PO_STATE_HISTORY', 'SUPPORT_INCIDENT', 'APPROVAL_REQUEST',
+    'AUTOMATION_REPORT'
   ))
   LOOP
     EXECUTE IMMEDIATE 'DROP TABLE ' || t.table_name || ' CASCADE CONSTRAINTS';
