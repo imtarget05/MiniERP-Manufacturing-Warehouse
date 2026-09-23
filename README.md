@@ -73,7 +73,7 @@ Dự án này xây dựng một hệ thống mini ERP giải quyết đúng 3 v�
 
 ## Dashboard kho
 
-![MiniERP Factory Operations Dashboard](docs/images/dashboard-preview.jpg)
+![MiniERP Factory Operations Dashboard](docs/images/dashboard-preview.png)
 
 ---
 
