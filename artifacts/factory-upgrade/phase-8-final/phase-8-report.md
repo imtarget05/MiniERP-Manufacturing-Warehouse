@@ -17,7 +17,7 @@ Environment: local Docker (`gvenzl/oracle-free:slim`, Oracle AI Database 26ai Fr
 | 2 | SQL load | `bash scripts/run-sql.sh` | OK — 31 tables, 35 package subprograms, 3 packages VALID, 0 INVALID |
 | 3 | Incident scenario | `bash scripts/test-incident.sh` | OK — 14 assertions passed, 0 failed |
 | 4 | Build (Release, warnings-as-errors) | `dotnet build src/MiniERP.Api.csproj -c Release -p:TreatWarningsAsErrors=true` | OK — 0 warnings, 0 errors |
-| 5 | Full test suite | `dotnet test tests/MiniERP.Api.Tests -c Release` | OK — **164 passed, 0 failed, 0 skipped** (144 unit/contract + 20 Oracle integration) |
+| 5 | Full test suite | `dotnet test tests/MiniERP.Api.Tests -c Release` | OK — **164 passed, 0 failed, 0 skipped** (139 database-free unit/contract + 25 Oracle integration) |
 | 6 | API smoke test | `bash scripts/test-api.sh http://localhost:5000` | OK — 53/53 checks, OpenAPI exposes 57 paths |
 | 7 | Traceability E2E | `bash scripts/test-traceability.sh http://localhost:5000` | OK — **61/61 checks** |
 | 8 | Backup + verify + restore safety locks | `backup-db.sh` / `verify-backup.sh` / `restore-db.sh` | OK — dump exported, all verification checks passed, both safety locks rejected unsafe restores |
@@ -105,3 +105,33 @@ Restore requires two independent, explicit opt-ins before any destructive action
 | Tests cover important rules | PASS (164 tests, 0 failures) |
 | README includes ERD and process diagram | PASS (Mermaid ERD + flow diagrams) |
 | Optional AI cannot mutate ERP data | PASS (AI diagnostic is advisory-only / out of core scope) |
+
+---
+
+## 5. CI defects found during final acceptance (fixed)
+
+Running the GitHub Actions pipeline for the first time after the upgrade surfaced two CI-only
+defects that local runs had masked. Both were fixed and re-verified:
+
+1. **`sonarcloud.yml` was an invalid workflow file** — it used the `secrets` context inside a
+   **job-level `if:`**, which GitHub rejects, so the workflow failed in 0 s. Fixed with a gate step
+   (`id: gate`) that reads `SONAR_TOKEN` through `env:` and publishes
+   `steps.gate.outputs.configured`; every scanner step is now conditioned on that output, so the
+   job skips cleanly (green) when the secret is absent. No hardcoded token fallback remains.
+2. **`ci.yml` Job 1 ("no Oracle required") failed 4 tests** with HTTP 503 — `Phase2RbacTests`
+   contains database-backed cases (login, `/api/admin/users`, refresh rotation) that lacked the
+   `Category=Integration` trait. Fixed by tagging the 5 Oracle-dependent cases as
+   `[Trait("Category", "Integration")]`.
+
+Re-verification after the fixes (Oracle container **stopped**):
+
+```text
+Passed!  - Failed: 0, Passed: 139, Skipped: 0, Total: 139   # --filter "Category!=Integration"
+```
+
+Full suite with Oracle running (unchanged total):
+
+```text
+Passed!  - Failed: 0, Passed: 164, Skipped: 0, Total: 164
+```
+
