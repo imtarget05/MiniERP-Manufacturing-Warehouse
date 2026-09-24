@@ -44,12 +44,12 @@ The system follows a **Modular Monolith** pattern optimized for high data integr
 
 ```mermaid
 flowchart TD
-    subgraph Client Tier
+    subgraph Client_Tier ["Client Tier"]
         BROWSER["Web Browser / Tablet (Operations Dashboard: HTML5, CSS3, JS)"]
         SCANNER["Handheld Barcode Scanner (Rugged Floor Terminals)"]
     end
 
-    subgraph Application Tier (ASP.NET Core 8 Web API)
+    subgraph Application_Tier ["Application Tier (ASP.NET Core 8 Web API)"]
         CORR["CorrelationIdMiddleware (X-Correlation-Id)"]
         AUTH["Authentication (PBKDF2 210k & Bearer JWT)"]
         AUDIT["AuditMiddleware (APP_AUDIT_EVENT)"]
@@ -58,7 +58,7 @@ flowchart TD
         DAPPER["Dapper Micro-ORM Layer"]
     end
 
-    subgraph Database Tier (Oracle Database 23c Free)
+    subgraph Database_Tier ["Database Tier (Oracle Database 23c Free)"]
         PKG_OPS["Package ERP_OPERATIONS (Stock, BOM, PO)"]
         PKG_AUT["Package ERP_AUTOMATION (Checks, Reservations, Approvals)"]
         PKG_TRC["Package ERP_TRACEABILITY (Lots, FEFO, Genealogy)"]
