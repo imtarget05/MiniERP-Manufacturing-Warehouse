@@ -15,32 +15,54 @@ jobs:
   sonarcloud:
     name: SonarCloud (.NET 8 + C#)
     runs-on: ubuntu-latest
-    if: "${{ secrets.SONAR_TOKEN != '' }}"
 
     steps:
+      # The `secrets` context is NOT available in a job-level `if:` (GitHub
+      # rejects such a workflow file as invalid). The token is therefore read
+      # through `env` in a gate step that publishes a step output; every later
+      # step is conditioned on it, so the job stays green when SONAR_TOKEN is
+      # not configured.
+      - name: Check SonarCloud token
+        id: gate
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -z "${SONAR_TOKEN:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=SonarCloud skipped::SONAR_TOKEN secret is not configured; analysis is skipped."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout code
+        if: steps.gate.outputs.configured == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0   # Full history needed for blame/new-code detection
 
       - name: Setup .NET 8 SDK
+        if: steps.gate.outputs.configured == 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
       - name: Setup Java 17 (required by SonarScanner)
+        if: steps.gate.outputs.configured == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
       - name: Install dotnet-sonarscanner
+        if: steps.gate.outputs.configured == 'true'
         run: dotnet tool install --global dotnet-sonarscanner
 
       - name: Restore dependencies
+        if: steps.gate.outputs.configured == 'true'
         run: dotnet restore tests/MiniERP.Api.Tests/MiniERP.Api.Tests.csproj
 
       - name: SonarCloud — Begin
+        if: steps.gate.outputs.configured == 'true'
         run: |
           dotnet sonarscanner begin \
             /k:"imtarget05_MiniERP-Manufacturing-Warehouse" \
@@ -55,9 +77,11 @@ jobs:
             /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml"
 
       - name: Build Solution
+        if: steps.gate.outputs.configured == 'true'
         run: dotnet build tests/MiniERP.Api.Tests/MiniERP.Api.Tests.csproj -c Release -p:NuGetAudit=false --no-restore
 
       - name: Run unit tests with coverage
+        if: steps.gate.outputs.configured == 'true'
         run: |
           dotnet test tests/MiniERP.Api.Tests/MiniERP.Api.Tests.csproj \
             -c Release \
@@ -68,4 +92,5 @@ jobs:
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
 
       - name: SonarCloud — End
+        if: steps.gate.outputs.configured == 'true'
         run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"

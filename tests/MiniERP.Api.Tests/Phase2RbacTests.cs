@@ -14,7 +14,9 @@ public class Phase2RbacTests
 {
     private const string TestKey = "security-contract-test-signing-key-01234567890123456789";
 
+    // Requires Oracle: the login endpoint validates PBKDF2 credentials in APP_USER.
     [Fact]
+    [Trait("Category", "Integration")]
     public async Task Login_ValidCredentials_ReturnsToken()
     {
         await using var factory = new RbacTestFactory();
@@ -31,7 +33,9 @@ public class Phase2RbacTests
         Assert.Contains(body.User.Roles, r => r is "ADMIN" or "ERP_ADMIN");
     }
 
+    // Requires Oracle: the login endpoint validates PBKDF2 credentials in APP_USER.
     [Fact]
+    [Trait("Category", "Integration")]
     public async Task Login_InvalidPassword_Returns401()
     {
         await using var factory = new RbacTestFactory();
@@ -123,7 +127,9 @@ public class Phase2RbacTests
         Assert.Equal(HttpStatusCode.Unauthorized, mutationResponse.StatusCode);
     }
 
+    // Requires Oracle: /api/admin/users reads the user list from the database.
     [Fact]
+    [Trait("Category", "Integration")]
     public async Task Admin_CanManageUsers()
     {
         await using var factory = new RbacTestFactory();
@@ -146,7 +152,9 @@ public class Phase2RbacTests
         Assert.Contains(users!, u => u.Username.Equals("admin", StringComparison.OrdinalIgnoreCase));
     }
 
+    // Requires Oracle: refresh-token rotation re-validates the user in the database.
     [Fact]
+    [Trait("Category", "Integration")]
     public async Task RefreshToken_Valid_ReturnsNewToken()
     {
         await using var factory = new RbacTestFactory();
@@ -170,7 +178,9 @@ public class Phase2RbacTests
         Assert.NotEqual(loginBody.RefreshToken, refreshBody.RefreshToken);
     }
 
+    // Requires Oracle: login + refresh rotation both rely on the database user record.
     [Fact]
+    [Trait("Category", "Integration")]
     public async Task RefreshToken_Revoked_Returns401()
     {
         await using var factory = new RbacTestFactory();
