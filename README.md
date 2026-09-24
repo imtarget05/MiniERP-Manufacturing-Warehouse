@@ -6,7 +6,7 @@
   <a href="https://github.com/imtarget05/MiniERP-Manufacturing-Warehouse/actions/workflows/ci.yml">
     <img src="https://github.com/imtarget05/MiniERP-Manufacturing-Warehouse/actions/workflows/ci.yml/badge.svg" alt="CI/CD Pipeline"/>
   </a>
-  <img src="https://img.shields.io/badge/Tests-164%2F164%20Passing-brightgreen?logo=checkmarx&logoColor=white" alt="Tests"/>
+  <img src="https://img.shields.io/badge/Tests-166%2F166%20Passing-brightgreen?logo=checkmarx&logoColor=white" alt="Tests"/>
   <img src="https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white" alt=".NET 8"/>
   <img src="https://img.shields.io/badge/Database-Oracle%2023c%2F21c-F80000?logo=oracle&logoColor=white" alt="Oracle Database"/>
   <img src="https://img.shields.io/badge/Language-C%23%20%7C%20PL%2FSQL-239120?logo=csharp&logoColor=white" alt="C# PL/SQL"/>
@@ -54,7 +54,7 @@ flowchart TD
         AUTH["Authentication (PBKDF2 210k & Bearer JWT)"]
         AUDIT["AuditMiddleware (APP_AUDIT_EVENT)"]
         RBAC["MutationAuthorizationMiddleware (Role-Based Policies)"]
-        ROUTES["57 Minimal API Endpoints"]
+        ROUTES["62 Minimal API Endpoints"]
         DAPPER["Dapper Micro-ORM Layer"]
     end
 
@@ -172,10 +172,10 @@ curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:5000/api/trace/FG-RU
 
 ## 10. Automated Testing
 
-The automated test suite contains **164 passing tests** across unit, contract, RBAC security, and Oracle integration suites:
+The automated test suite contains **166 passing tests** across unit, contract, RBAC security, and Oracle integration suites (139 run without a database, 27 need Oracle):
 
 ```bash
-# Run Unit & Contract tests (No database required, ~12 seconds):
+# Run Unit & Contract tests (No database required, 139 tests, ~12 seconds):
 export PATH="$HOME/.dotnet:$PATH"
 dotnet test tests/MiniERP.Api.Tests --filter "Category!=Integration"
 
@@ -183,7 +183,7 @@ dotnet test tests/MiniERP.Api.Tests --filter "Category!=Integration"
 dotnet test tests/MiniERP.Api.Tests
 ```
 
-- **Test Results:** `Passed: 164, Failed: 0, Skipped: 0`.
+- **Test Results:** `Passed: 166, Failed: 0, Skipped: 0` (DB-free run: `Passed: 139, Failed: 0`).
 - *Detailed Test Strategy:* [`docs/testing/test-strategy.md`](docs/testing/test-strategy.md).
 
 ---

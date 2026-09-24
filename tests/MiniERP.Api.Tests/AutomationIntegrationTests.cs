@@ -288,4 +288,60 @@ public class AutomationIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
         Assert.Equal("ERR_AUTOMATION_STATE", doc.RootElement.GetProperty("businessCode").GetString());
     }
+
+    /// <summary>
+    /// The approval gate must round-trip through the read model: once a request
+    /// has been decided, GET /api/automation/approvals has to materialize the row.
+    /// Regression guard - a nullable DATE column (DECIDED_AT) cannot be mapped by
+    /// a positional Dapper record, which used to return HTTP 500 on every read.
+    /// </summary>
+    [Fact]
+    public async Task ApprovalGate_DecidedRequestIsReadable()
+    {
+        var client = Client();
+        var approvalNo = $"AUT_APP_{DateTime.Now:HHmmss}_{Random.Shared.Next(1000, 9999)}";
+
+        var create = await client.PostAsJsonAsync("/api/automation/approvals",
+            new CreateApprovalRequest(approvalNo, "INVENTORY_ADJUST", "CYCLE_AUT", "{\"qty\":-1}"));
+        create.EnsureSuccessStatusCode();
+        var created = await create.Content.ReadFromJsonAsync<ApprovalResponse>(Web);
+        Assert.NotNull(created);
+        Assert.Equal("PENDING", created!.Status);
+
+        var decision = await client.PostAsJsonAsync(
+            $"/api/automation/approvals/{approvalNo}/decision", new DecideApprovalRequest("APPROVED"));
+        decision.EnsureSuccessStatusCode();
+
+        var listRes = await client.GetAsync("/api/automation/approvals?status=APPROVED&take=100");
+        listRes.EnsureSuccessStatusCode();
+        var rows = await listRes.Content.ReadFromJsonAsync<List<ApprovalDto>>(Web);
+        Assert.NotNull(rows);
+        var row = Assert.Single(rows!, r => r.ApprovalNo == approvalNo);
+        Assert.Equal("INVENTORY_ADJUST", row.Action);
+        Assert.Equal("CYCLE_AUT", row.RefNo);
+        Assert.Equal("APPROVED", row.Status);
+        Assert.NotNull(row.DecidedAt);
+    }
+
+    /// <summary>
+    /// The automation read models (runs / reports / alerts) must materialize too:
+    /// every one of them contains at least one nullable DATE column.
+    /// </summary>
+    [Fact]
+    public async Task AutomationReadModels_Materialize()
+    {
+        var client = Client();
+
+        var runs = await client.GetAsync("/api/automation/runs?take=5");
+        runs.EnsureSuccessStatusCode();
+        await runs.Content.ReadFromJsonAsync<List<AutomationRunDto>>(Web);
+
+        var alerts = await client.GetAsync("/api/automation/replenishment/alerts?take=5");
+        alerts.EnsureSuccessStatusCode();
+        await alerts.Content.ReadFromJsonAsync<List<ReplenishAlertDto>>(Web);
+
+        var reports = await client.GetAsync("/api/automation/reports?withPayload=false&take=5");
+        reports.EnsureSuccessStatusCode();
+        await reports.Content.ReadFromJsonAsync<List<AutomationReportDto>>(Web);
+    }
 }

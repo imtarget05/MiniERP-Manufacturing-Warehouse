@@ -42,8 +42,8 @@ flowchart LR
   1. Boot Oracle Database 23c Free container (`minierp-oracle`).
   2. Execute sequential SQL migrations (31 tables, 3 PL/SQL packages, master seed data).
   3. Verify PL/SQL compilation validity (`STATUS = 'VALID'`).
-  4. Execute the full test suite against a live Oracle instance (164 test cases, including the
-     25 `Category=Integration` cases that are excluded from Job 1).
+  4. Execute the full test suite against a live Oracle instance (166 test cases, including the
+     27 `Category=Integration` cases that are excluded from Job 1).
   5. Run the simulated material shortage incident scenario (`PO001`, 14 assertions).
   6. Curl-level API smoke test of all documented endpoints (53 checks).
   7. Real traceability end-to-end run: receive → label → FEFO issue → genealogy → reconciliation.

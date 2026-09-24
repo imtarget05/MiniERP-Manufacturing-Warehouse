@@ -18,7 +18,7 @@ The upgrade strictly adhered to the phased delivery roadmap:
 - **Security & Secret Hygiene (Phase 3):** PBKDF2 with 210,000 iterations, Bearer JWT tokens, immutable audit logging (`APP_AUDIT_EVENT`), and removal of all hardcoded token fallbacks.
 - **Business Analysis Suite (Phase 4):** Created 7 formal BA specifications (`docs/business-analysis/`).
 - **Project Management Simulation (Phase 5):** Delivered Project Charter, Scope, Stakeholders, Milestones, Risks, Issues, and Change Request **CR-001**.
-- **Automated Testing (Phase 6):** 164 unit and integration tests passing with 0 failures and 0 skips.
+- **Automated Testing (Phase 6):** 166 unit and integration tests passing with 0 failures and 0 skips.
 - **User Acceptance Testing (Phase 7):** Comprehensive UAT plan, 8 test scenarios, execution results, and formal sign-off certificate.
 - **Disaster Recovery (Phase 8):** Logical Oracle Data Pump backups (`expdp`/`impdp`), automated verification (`verify-backup.sh`), and documented restore drill achieving 4m12s RTO.
 - **Observability (Phase 9):** Request correlation (`X-Correlation-Id`), `/api/health` probes, and autonomous error logging (`ERROR_LOG`).
@@ -69,12 +69,12 @@ flowchart TD
 
 ## 4. Test Suite Execution & Quality Verification
 
-- **Total Test Cases:** **164**
+- **Total Test Cases:** **166** (139 run without a database, 27 `Category=Integration` need Oracle)
 - **Test Framework:** xUnit 2.5 on .NET 8 SDK
 - **Execution Command:** `dotnet test tests/MiniERP.Api.Tests`
 - **Result:**
   ```text
-  Passed! - Failed: 0, Passed: 164, Skipped: 0, Total: 164, Duration: 1 m 21 s
+  Passed! - Failed: 0, Passed: 166, Skipped: 0, Total: 166, Duration: 40 s
   ```
 - **Key Test Suites:**
   - `ApiIntegrationTests.cs`: Verified Phase 1 acceptance workflow (100 RM received $\rightarrow$ 30 consumed $\rightarrow$ 70 balance $\rightarrow$ 10 FG produced).

@@ -1,0 +1,10 @@
+# Build output and VCS metadata from the host must never be copied into the
+# build stage: a host bin/ or obj/ would clobber the restore performed inside
+# the image and cause NETSDK1064 (package not found) on `--no-restore`.
+bin/
+obj/
+.git/
+.gitignore
+*.user
+*.swp
+TestResults/

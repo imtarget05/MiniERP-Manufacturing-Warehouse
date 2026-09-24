@@ -35,7 +35,13 @@ services:
     ports:
       - "5000:5000"
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
+      # Local demo default is Development so Swagger is served and a random
+      # signing key is generated. A hardened deployment must set
+      # ASPNETCORE_ENVIRONMENT=Production together with JWT_SIGNING_KEY
+      # (>= 32 bytes) from a secret store - the API deliberately refuses to
+      # start outside Development without it.
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-}
       ConnectionStrings__OracleDb: Data Source=oracle-db:1521/FREEPDB1;User Id=${APP_USER:-erp_user};Password=${APP_USER_PWD:-ErpPassword2026#};
       CORS_ALLOWED_ORIGINS: http://localhost:8080,http://localhost:5000,http://localhost:3000
     depends_on:

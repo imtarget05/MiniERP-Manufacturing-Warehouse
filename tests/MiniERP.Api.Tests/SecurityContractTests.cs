@@ -73,6 +73,12 @@ public class SecurityContractTests
             MutationAuthorization.PolicyFor("POST", new PathString("/api/manufacturing/production-order/PO1/complete-traceable")));
         Assert.Equal(AuthPolicies.LabelMutation,
             MutationAuthorization.PolicyFor("POST", new PathString("/api/labels")));
+        // CR-001 two-person rule: proposing is open to operational roles,
+        // deciding is restricted to Admin/Support.
+        Assert.Equal(AuthPolicies.OperationsMutation,
+            MutationAuthorization.PolicyFor("POST", new PathString("/api/automation/approvals")));
+        Assert.Equal(AuthPolicies.SupportMutation,
+            MutationAuthorization.PolicyFor("POST", new PathString("/api/automation/approvals/APP-1/decision")));
         Assert.Null(MutationAuthorization.PolicyFor("POST", new PathString("/api/auth/login")));
         Assert.Null(MutationAuthorization.PolicyFor("GET", new PathString("/api/warehouse")));
     }

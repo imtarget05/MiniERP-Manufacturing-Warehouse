@@ -25,7 +25,7 @@ Rather than rebuilding from scratch, the system already possesses strong transac
 | **Authentication** | Bearer Token (JWT-like HMAC-SHA256) + PBKDF2 (210,000 rounds) | JWT / Role-Based Access Control | Secure password derivation with individual salts. In-memory refresh token store. Role-based policies in place. |
 | **Frontend** | Vanilla HTML5 / CSS3 / ES6 JavaScript (`dashboard/`) | Modern Web Dashboard (Vanilla JS + Angular portfolio alignment) | Responsive 5-tab UI with live KPI metrics, stock visualization, lot receiving, barcode scanner, and genealogy tree. |
 | **Containerization**| `docker-compose.yml` for Oracle Free DB | Full Docker Compose (DB + Backend + Frontend) | Database containerized; backend and frontend Dockerfiles are currently missing. |
-| **Testing** | xUnit (`tests/MiniERP.Api.Tests`) | xUnit Unit + Integration + Contract | 164 tests covering contracts, RBAC, traceability, and Oracle workflows. |
+| **Testing** | xUnit (`tests/MiniERP.Api.Tests`) | xUnit Unit + Integration + Contract | 166 tests covering contracts, RBAC, traceability, and Oracle workflows. |
 | **CI/CD** | GitHub Actions (`ci.yml`, `sonarcloud.yml`) | Multi-stage GitHub Actions | Unit and integration jobs configured; SonarCloud workflow contains a fallback token requiring remediation. |
 | **Documentation** | Technical specs in `docs/` & `README.md` | Comprehensive 18-Phase ERP Lifecycle Suite | Existing docs cover schema, PL/SQL, API, and DR; missing BA, PM, UAT, and ADR packs. |
 
@@ -95,7 +95,7 @@ The database contains **31 tables** divided across four architectural layers:
 - *Gap identified against user plan:* The prompt references Angular as the target frontend framework. The existing implementation is clean, production-grade Vanilla JavaScript. We will maintain the existing dashboard while preparing the architectural roadmap and Angular-ready component specifications.
 
 ### 3.4 Automated Test Suite (`tests/MiniERP.Api.Tests/`)
-- Contains **164 automated test cases** utilizing xUnit, FluentAssertions, and ASP.NET Core `WebApplicationFactory<Program>`.
+- Contains **166 automated test cases** utilizing xUnit, FluentAssertions, and ASP.NET Core `WebApplicationFactory<Program>`.
 - Test Suites:
   - `ApiIntegrationTests.cs`: End-to-end API workflows with Oracle connection (Health, Warehouses, Stock movements, BOM, PO complete).
   - `AutomationIntegrationTests.cs`: Production order lifecycle, material check, soft reservation, replenishment alert sweep, stale order detection.
@@ -165,7 +165,7 @@ The database contains **31 tables** divided across four architectural layers:
 | **Phase 3** | Auditability & Enterprise Security | Working in API & DB | Remove SonarCloud hardcoded token fallback, create `docs/security/security-design.md`. | **P0** |
 | **Phase 4** | Business Analysis Documentation | Missing | Author `docs/business-analysis/` (Context, As-Is, To-Be, FRs, NFRs, Use Cases, RTM). | **P1** |
 | **Phase 5** | ERP Implementation Simulation | Missing | Author `docs/project-management/` (Charter, Scope, Risks, Change Request CR-001). | **P2** |
-| **Phase 6** | Automated Testing | 164 tests exist, seed sync needed | Reseed database and ensure all 164 unit and integration tests pass cleanly (0 failures). | **P0** |
+| **Phase 6** | Automated Testing | 166 tests exist, seed sync needed | Reseed database and ensure all 166 unit and integration tests pass cleanly (0 failures). | **P0** |
 | **Phase 7** | UAT Simulation & Acceptance | Missing | Author `docs/uat/` (Plan, Test Cases UAT-INV-001+, Results, Sign-off). | **P1** |
 | **Phase 8** | Database Backup & Disaster Recovery | Scripts exist, report needed | Document drill results and operational procedures in `docs/operations/backup-restore.md`. | **P1** |
 | **Phase 9** | Observability & Monitoring | `/health` & logs exist | Create `docs/operations/monitoring.md` documenting metrics, health checks, error triage. | **P1** |

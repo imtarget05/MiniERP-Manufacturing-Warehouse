@@ -12,7 +12,7 @@
 | **M1** | **Core ERP Engine & Database Setup** | Weeks 2–3 | 31 Oracle tables, 3 valid PL/SQL packages, basic stock in/out, BOM calculation. | 🟢 Completed |
 | **M2** | **Traceability & FEFO Engine** | Weeks 4–5 | Lot tracking, FEFO allocation, Zebra ZPL label service, bidirectional genealogy API. | 🟢 Completed |
 | **M3** | **Enterprise Governance & Security** | Weeks 6–7 | PBKDF2 210k password hashing, JWT Bearer tokens, two-person approval gate, audit logs. | 🟢 Completed |
-| **M4** | **Automated Quality & Test Hardening** | Weeks 8–9 | 164+ automated xUnit tests passing, 0 failures, CI pipeline green. | 🟢 Completed |
+| **M4** | **Automated Quality & Test Hardening** | Weeks 8–9 | 166+ automated xUnit tests passing, 0 failures, CI pipeline green. | 🟢 Completed |
 | **M5** | **Business Analysis & Lifecycle Docs** | Weeks 10–11 | Complete BA suite (01-07), PM logs, UAT test suite, DR runbooks. | 🟢 Completed |
 | **M6** | **Disaster Recovery Drill & Sign-off** | Week 12 | Execution of full `backup-db.sh` and `restore-db.sh` drill; verifier validation. | 🟢 Completed |
 | **M7** | **Legacy Data Cutover & Go-Live** | Week 13 | Legacy CSV data migration, checksum reconciliation, cutover checklist execution. | 🟢 Completed |

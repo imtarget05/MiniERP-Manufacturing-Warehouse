@@ -11,7 +11,7 @@
 |---|---|---|:---:|
 | **Technical Architecture** | 31 tables, 3 PL/SQL packages compiled VALID | `scripts/run-sql.sh` | 🟢 READY |
 | **Data Migration** | Legacy CSV imported with zero mathematical variance ($\Delta = 0$) | `scripts/migrate-legacy-data.sh` | 🟢 READY |
-| **Quality & Testing** | 164+ automated unit & integration tests passing | `dotnet test` (0 failures) | 🟢 READY |
+| **Quality & Testing** | 166+ automated unit & integration tests passing | `dotnet test` (0 failures) | 🟢 READY |
 | **Security & Governance** | PBKDF2 210k password hashing, JWT Bearer, RBAC mutation policy | `Phase2RbacTests.cs` | 🟢 READY |
 | **Disaster Recovery** | Automated `backup-db.sh`, `restore-db.sh`, integrity verifier | `scripts/verify-backup.sh` | 🟢 READY |
 | **Observability** | `/api/health` probes active, correlation tracking, `ERROR_LOG` | `ApiIntegrationTests.cs` | 🟢 READY |

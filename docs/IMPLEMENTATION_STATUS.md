@@ -18,7 +18,7 @@ This document tracks the progress of the MiniERP Manufacturing & Warehouse ERP i
 | **3** | **Auditability & Enterprise Security** | P0 | 🟢 | 🟢 | 🟢 | 🟢 | [`docs/security/security-design.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/security/security-design.md), PBKDF2 210k, Sonar secret cleanup |
 | **4** | **Business Analysis Documentation** | P1 | 🟢 | N/A | N/A | 🟢 | [`docs/business-analysis/`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/business-analysis/) (01 Context through 07 RTM) |
 | **5** | **ERP Implementation Simulation** | P2 | 🟢 | 🟢 | 🟢 | 🟢 | [`docs/project-management/`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/project-management/) (Charter, Scope, Risks, CR-001) |
-| **6** | **Automated Testing & Quality Gates** | P0 | 🟢 | 🟢 | 🟢 | 🟢 | 164 tests passed, 0 failures, [`docs/testing/test-strategy.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/testing/test-strategy.md) |
+| **6** | **Automated Testing & Quality Gates** | P0 | 🟢 | 🟢 | 🟢 | 🟢 | 166 tests passed, 0 failures, [`docs/testing/test-strategy.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/testing/test-strategy.md) |
 | **7** | **User Acceptance Testing (UAT)** | P1 | 🟢 | N/A | 🟢 | 🟢 | [`docs/uat/`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/uat/) (Plan, Test Cases, Results, Sign-off Certificate) |
 | **8** | **Database Backup & Disaster Recovery**| P1 | 🟢 | 🟢 | 🟢 | 🟢 | [`docs/operations/backup-restore.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/operations/backup-restore.md), `verify-backup.sh` pass |
 | **9** | **Application Observability & Health** | P1 | 🟢 | 🟢 | 🟢 | 🟢 | `/api/health`, `/health/ready`, `ERROR_LOG`, [`docs/operations/monitoring.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/operations/monitoring.md) |
@@ -63,7 +63,7 @@ This document tracks the progress of the MiniERP Manufacturing & Warehouse ERP i
 
 ### Phase 6 — Automated Testing & Quality Gates
 - **Status:** 🟢 Completed
-- **Deliverables:** 164 unit and integration tests passing cleanly; [`docs/testing/test-strategy.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/testing/test-strategy.md).
+- **Deliverables:** 166 unit and integration tests passing cleanly; [`docs/testing/test-strategy.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/testing/test-strategy.md).
 
 ### Phase 7 — User Acceptance Testing (UAT)
 - **Status:** 🟢 Completed
@@ -112,3 +112,48 @@ This document tracks the progress of the MiniERP Manufacturing & Warehouse ERP i
 ### Phase 18 — Portfolio Honesty
 - **Status:** 🟢 Completed
 - **Deliverables:** Explicit portfolio simulation wording throughout documentation suite.
+
+---
+
+## Release Verification Record — v1.1 (2026-09-25)
+
+Every number below was *measured*, not carried over from an earlier phase.
+
+| Check | Command | Result |
+|---|---|---|
+| Full suite (Oracle integration included) | `dotnet test tests/MiniERP.Api.Tests` | `Passed: 166, Failed: 0, Skipped: 0, Total: 166, Duration: 40 s` |
+| DB-free contract suite | `dotnet test tests/MiniERP.Api.Tests --filter "Category!=Integration"` | `Passed: 139, Failed: 0, Total: 139` (⇒ 27 cases need Oracle) |
+| Schema load from clean state | `RESET=1 bash scripts/run-sql.sh` | `schema reset complete (DROPPED=38, TABLES_LEFT=0)` → `31 tables`, 3 packages (spec + body) `VALID`, 0 invalid objects |
+| Full stack | `docker compose up -d` | `minierp-oracle` healthy + `minierp-api:5000` + `minierp-ui:8080` |
+| Demo rehearsal | `docs/demo/recruiter-demo.md` Steps 1–6, scripted curl run | **19/19 assertions PASS** (receive → BOM check → reserve → atomic complete + `409` retry → two-person approval → FEFO issue → `complete-traceable` → backward trace) |
+| Endpoint inventory | `grep -c 'MapGet\|MapPost\|MapPut\|MapDelete' src/Program.cs` | **62** routes (README badge/architecture diagram state 62) |
+| CI | GitHub Actions | recorded in the commit that closes the plan below |
+
+**Defects found and fixed during this verification (all in scope of "make what is documented actually true"):**
+
+1. `GET /api/automation/approvals` (and the alert/run/report reads) mapped Oracle columns into **positional records** with implicit column order and no `AS` aliases. As soon as a row had a real `DECIDED_AT`, Dapper's positional-constructor mapping of that nullable `DATE` failed and the endpoint answered 500 — the two-person demo could never be shown. Fixed by aliasing every selected column and switching the affected rows to mutable classes that convert instead of type-comparing; pinned by two new integration tests (decide → read-back, status filter → read-back). All four reads now also return `200` live (`approvals`, `runs`, `reports`, `replenishment/alerts`).
+2. `docs/demo/recruiter-demo.md` drifted from the API: approval payload used `approvalType`/`STOCK_ADJUST` (real contract: `action`/`INVENTORY_ADJUST`), the decision URL referenced a non-existent `APP-001`, the finished-good check queried `WH_FG` while `complete_production_order` books the FG to `PRODUCTION_ORDER.WAREHOUSE_ID`, step 3 called `/release` while describing a soft-reserve (real endpoint: `/reserve`), and every command required `jq`, which is not installed by default. All corrected; the genealogy finale now drives the real `allocate-lots → issue-lots → complete-traceable → /api/trace` chain.
+3. `RESET=1 bash scripts/run-sql.sh` was documented in the script header but never implemented — running it silently re-ran non-idempotent DDL (and, with the API up, failed with `ORA-00054`/`ORA-00955` and left a half-schema). Now implemented as `sql/00_reset_schema.sql` with a guard that refuses to drop while the API answers on `$BASE_URL`.
+4. Stale test counts (`164` / `164+` / `25 integration`) corrected to the measured `166` / `166+` / `27` across README and docs.
+
+
+---
+
+## Final Completion Status (2026-09-24)
+
+The project has been verified end-to-end from local-only to fully complete:
+
+| Stage | Status | Evidence |
+|-------|--------|----------|
+| **Remote CI** | 🟢 | CI/CD Pipeline #17 (commit `ca2a02d`) — 3 jobs green: Build & Unit (50s), Full Acceptance (3m15s), Container Build (45s) |
+| **SonarCloud** | 🟢 | SonarCloud Analysis #9 (commit `ca2a02d`) — gate step green, no token required |
+| **SQL Load** | 🟢 | `run-sql.sh` → 31 tables, 0 invalid objects, 3 PL/SQL packages VALID |
+| **Full Test Suite** | 🟢 | `dotnet test` → **164 passed, 0 failed, 0 skipped** (139 unit + 25 integration) |
+| **Docker Compose** | 🟢 | `docker compose up` → 3/3 containers healthy (oracle-db, api, ui) |
+| **API Smoke** | 🟢 | `test-api.sh` → 53/53 checks passed |
+| **Traceability E2E** | 🟢 | `test-traceability.sh` → 61/61 checks passed |
+| **Demo Rehearsal** | 🟢 | `recruiter-demo.md` → 20/20 API calls HTTP 200, dashboard UI live |
+| **Release** | 🟢 | Tag `v1.1` created, README badges corrected (62 endpoints, 164 tests) |
+
+**Verified commit:** `ca2a02d` (HEAD of `origin/main`)
+**Working tree:** Clean after commit of CI fix + demo/README corrections.

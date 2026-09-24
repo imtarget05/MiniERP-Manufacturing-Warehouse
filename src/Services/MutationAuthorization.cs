@@ -30,10 +30,15 @@ public static class MutationAuthorization
         if (p.Contains("/complete-traceable", StringComparison.OrdinalIgnoreCase) ||
             p.StartsWith("/api/manufacturing/", StringComparison.OrdinalIgnoreCase))
             return AuthPolicies.ProductionMutation;
+        // CR-001 two-person rule: any operational role may *propose* an approval
+        // request, but only Admin/Support may *decide* it.
+        if (p.Contains("/approvals", StringComparison.OrdinalIgnoreCase))
+            return p.EndsWith("/decision", StringComparison.OrdinalIgnoreCase)
+                ? AuthPolicies.SupportMutation
+                : AuthPolicies.OperationsMutation;
         if (p.StartsWith("/api/support/", StringComparison.OrdinalIgnoreCase) ||
             p.StartsWith("/api/integration/helpdesk/", StringComparison.OrdinalIgnoreCase) ||
-            p.Contains("/incidents", StringComparison.OrdinalIgnoreCase) ||
-            p.Contains("/approvals", StringComparison.OrdinalIgnoreCase))
+            p.Contains("/incidents", StringComparison.OrdinalIgnoreCase))
             return AuthPolicies.SupportMutation;
         if (p.Equals("/api/automation/stock/adjust", StringComparison.OrdinalIgnoreCase))
             return AuthPolicies.AdminOnly;

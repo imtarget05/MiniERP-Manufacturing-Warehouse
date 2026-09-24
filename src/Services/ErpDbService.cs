@@ -402,30 +402,79 @@ public partial class ErpDbService
     // Row records mirror provider wire types (Oracle NUMBER -> decimal), then
     // map to the public DTOs explicitly - same pattern as the reads above.
 
-    private sealed record AlertRow(decimal Id, string ItemCode, string WarehouseCode,
-        decimal QuantityAvailable, decimal QuantitySuggested, string TriggerType,
-        string? RefNo, string Status, string TriggeredBy, DateTime CreatedAt, DateTime? ClosedAt);
+    /// <summary>Dapper-friendly mutable row (see <see cref="ApprovalRow"/>).</summary>
+    private sealed class AlertRow
+    {
+        public decimal Id { get; set; }
+        public string ItemCode { get; set; } = string.Empty;
+        public string WarehouseCode { get; set; } = string.Empty;
+        public decimal QuantityAvailable { get; set; }
+        public decimal QuantitySuggested { get; set; }
+        public string TriggerType { get; set; } = string.Empty;
+        public string? RefNo { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string TriggeredBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+        public DateTime? ClosedAt { get; set; }
+    }
 
     private sealed record StaleOrderRow(string ProductionOrderNo, string FinishedGoodCode,
         decimal PlannedQuantity, string Status, DateTime CreatedAt, DateTime LastChangeAt,
         decimal DaysIdle);
 
-    private sealed record AutomationRunRow(decimal Id, string WorkflowName, string TriggerType,
-        string? TriggerId, string Status, DateTime StartedAt, DateTime? FinishedAt,
-        decimal RetryCount, string? ErrorCode, string? ErrorMessage, string? ResultSummary,
-        string RunBy);
+    /// <summary>Dapper-friendly mutable row (see <see cref="ApprovalRow"/>).</summary>
+    private sealed class AutomationRunRow
+    {
+        public decimal Id { get; set; }
+        public string WorkflowName { get; set; } = string.Empty;
+        public string TriggerType { get; set; } = string.Empty;
+        public string? TriggerId { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime StartedAt { get; set; }
+        public DateTime? FinishedAt { get; set; }
+        public decimal RetryCount { get; set; }
+        public string? ErrorCode { get; set; }
+        public string? ErrorMessage { get; set; }
+        public string? ResultSummary { get; set; }
+        public string RunBy { get; set; } = string.Empty;
+    }
 
-    private sealed record ReportRow(decimal Id, string ReportType, DateTime? PeriodFrom,
-        DateTime? PeriodTo, decimal LineCount, string? PayloadJson, string GeneratedBy,
-        DateTime GeneratedAt);
+    /// <summary>Dapper-friendly mutable row (see <see cref="ApprovalRow"/>).</summary>
+    private sealed class ReportRow
+    {
+        public decimal Id { get; set; }
+        public string ReportType { get; set; } = string.Empty;
+        public DateTime? PeriodFrom { get; set; }
+        public DateTime? PeriodTo { get; set; }
+        public decimal LineCount { get; set; }
+        public string? PayloadJson { get; set; }
+        public string GeneratedBy { get; set; } = string.Empty;
+        public DateTime GeneratedAt { get; set; }
+    }
 
     private sealed record IncidentRow(decimal Id, string ErrorCode, string? RefNo,
         string Title, string? ContextJson, string? Diagnosis, string Status,
         string CreatedBy, DateTime CreatedAt);
 
-    private sealed record ApprovalRow(decimal Id, string ApprovalNo, string Action,
-        string? RefNo, string? Payload, string Status, string? Requester,
-        string? Approver, DateTime? DecidedAt, DateTime CreatedAt);
+    /// <summary>
+    /// Dapper-friendly mutable row. A positional record requires the reader's
+    /// column types to match the constructor parameters exactly, which fails for
+    /// a nullable DATE column as soon as a value is present (reader DateTime vs
+    /// DateTime?); property-based mapping converts instead of comparing types.
+    /// </summary>
+    private sealed class ApprovalRow
+    {
+        public decimal Id { get; set; }
+        public string ApprovalNo { get; set; } = string.Empty;
+        public string Action { get; set; } = string.Empty;
+        public string? RefNo { get; set; }
+        public string? Payload { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string? Requester { get; set; }
+        public string? Approver { get; set; }
+        public DateTime? DecidedAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
 
     /// <summary>Replenishment alerts raised by W1/W3 (filter by status).</summary>
     public async Task<IEnumerable<ReplenishAlertDto>> GetReplenishAlertsAsync(
@@ -436,12 +485,12 @@ public partial class ErpDbService
             ? string.Empty : "WHERE a.STATUS = :Status ";
         var sql = $@"
             SELECT * FROM (
-                SELECT a.ID, i.CODE AS ItemCode, w.CODE AS WarehouseCode,
+                SELECT a.ID AS Id, i.CODE AS ItemCode, w.CODE AS WarehouseCode,
                        a.QTY_AVAILABLE AS QuantityAvailable,
                        a.QTY_SUGGESTED AS QuantitySuggested,
                        a.TRIGGER_TYPE AS TriggerType, a.REF_NO AS RefNo,
-                       a.STATUS, a.TRIGGERED_BY AS TriggeredBy,
-                       a.CREATED_AT, a.CLOSED_AT
+                       a.STATUS AS Status, a.TRIGGERED_BY AS TriggeredBy,
+                       a.CREATED_AT AS CreatedAt, a.CLOSED_AT AS ClosedAt
                   FROM REPLENISH_ALERT a
                   JOIN ITEM i ON a.ITEM_ID = i.ID
                   JOIN WAREHOUSE w ON a.WAREHOUSE_ID = w.ID
@@ -492,9 +541,12 @@ public partial class ErpDbService
         var where = filters.Count > 0 ? "WHERE " + string.Join(" AND ", filters) + " " : string.Empty;
         var sql = $@"
             SELECT * FROM (
-                SELECT ID, WORKFLOW_NAME, TRIGGER_TYPE, TRIGGER_ID, STATUS,
-                       STARTED_AT, FINISHED_AT, RETRY_COUNT, ERROR_CODE,
-                       ERROR_MESSAGE, RESULT_SUMMARY, RUN_BY
+                SELECT ID AS Id, WORKFLOW_NAME AS WorkflowName,
+                       TRIGGER_TYPE AS TriggerType, TRIGGER_ID AS TriggerId,
+                       STATUS AS Status, STARTED_AT AS StartedAt,
+                       FINISHED_AT AS FinishedAt, RETRY_COUNT AS RetryCount,
+                       ERROR_CODE AS ErrorCode, ERROR_MESSAGE AS ErrorMessage,
+                       RESULT_SUMMARY AS ResultSummary, RUN_BY AS RunBy
                   FROM ERP_AUTOMATION_RUN
                   {where}
                  ORDER BY ID DESC
@@ -516,9 +568,11 @@ public partial class ErpDbService
         var payloadCol = withPayload ? "PAYLOAD_JSON" : "TO_CLOB(NULL)";
         var sql = $@"
             SELECT * FROM (
-                SELECT ID, REPORT_TYPE, PERIOD_FROM, PERIOD_TO, LINE_COUNT,
+                SELECT ID AS Id, REPORT_TYPE AS ReportType,
+                       PERIOD_FROM AS PeriodFrom, PERIOD_TO AS PeriodTo,
+                       LINE_COUNT AS LineCount,
                        {payloadCol} AS PayloadJson,
-                       GENERATED_BY, GENERATED_AT
+                       GENERATED_BY AS GeneratedBy, GENERATED_AT AS GeneratedAt
                   FROM AUTOMATION_REPORT
                   {filter}
                  ORDER BY ID DESC
@@ -561,8 +615,10 @@ public partial class ErpDbService
             ? string.Empty : "WHERE STATUS = :Status ";
         var sql = $@"
             SELECT * FROM (
-                SELECT ID, APPROVAL_NO, ACTION, REF_NO, PAYLOAD, STATUS,
-                       REQUESTER, APPROVER, DECIDED_AT, CREATED_AT
+                SELECT ID AS Id, APPROVAL_NO AS ApprovalNo, ACTION AS Action,
+                       REF_NO AS RefNo, PAYLOAD AS Payload, STATUS AS Status,
+                       REQUESTER AS Requester, APPROVER AS Approver,
+                       DECIDED_AT AS DecidedAt, CREATED_AT AS CreatedAt
                   FROM APPROVAL_REQUEST
                   {filter}
                  ORDER BY ID DESC

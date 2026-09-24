@@ -1,0 +1,4 @@
+# Only the static dashboard assets belong in the Nginx webroot.
+README.md
+Dockerfile
+.dockerignore

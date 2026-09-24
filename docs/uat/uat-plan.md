@@ -46,7 +46,7 @@ Specific acceptance objectives:
 ## 4. Entry & Exit Criteria
 
 ### Entry Criteria:
-- All 164 unit and integration tests passing in CI/CD pipeline.
+- All 166 unit and integration tests passing in CI/CD pipeline.
 - Database packages `ERP_OPERATIONS`, `ERP_AUTOMATION`, and `ERP_TRACEABILITY` compiled with `VALID` status.
 - Test user accounts seeded with correct PBKDF2 password credentials.
 

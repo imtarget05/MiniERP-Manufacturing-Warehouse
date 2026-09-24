@@ -13,6 +13,9 @@
 #          Optional:  --with-incident      also runs sql/04_incident_scenarios.sql
 # USAGE:   bash scripts/run-sql.sh [--with-incident]
 #          RESET=1 bash scripts/run-sql.sh        (drop & recreate the schema)
+#                             -> runs sql/00_reset_schema.sql first; the API must
+#                                be stopped (docker compose stop api) so no session
+#                                holds DML locks, otherwise DROP fails ORA-00054.
 # ============================================================================
 set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -31,6 +34,31 @@ printf '%b\n' "${C_B} Loading the Mini ERP database${C_0}"
 rule
 
 db_probe || die "cannot log in as $APP_USER@$PDB - run: bash scripts/start-db.sh"
+
+# ----------------------------------------------------------------- RESET=1
+# Drop everything first so a second load is not run against a half-populated
+# schema (01_schema.sql / 07_*.sql are not idempotent).
+if [ "${RESET:-0}" = "1" ]; then
+  if curl -s -o /dev/null --max-time 2 "$BASE_URL/api/health"; then
+    die "the API is still answering on $BASE_URL - stop it first (docker compose stop api); a live session holds DML locks and DROP then fails with ORA-00054"
+  fi
+  warn "RESET=1 - dropping every object of schema '$APP_USER' before loading"
+  tmp="$(mktemp)"
+  run_sql "$SQL_DIR/00_reset_schema.sql" "$tmp" || true
+  if ! grep -q 'ERP_SCHEMA_RESET_DONE' "$tmp"; then
+    err "schema reset did not report ERP_SCHEMA_RESET_DONE"
+    grep -E '^ORA-|^SP2-' "$tmp" | sort -u | head -10 | sed 's/^/       /'
+    tail -15 "$tmp" | sed 's/^/       /'
+    rm -f "$tmp"; exit 1
+  fi
+  if sql_unexpected_error "$tmp"; then
+    err "sql/00_reset_schema.sql produced unexpected errors:"
+    grep -E '^ORA-|^SP2-' "$tmp" | sort -u | head -10 | sed 's/^/       /'
+    rm -f "$tmp"; exit 1
+  fi
+  ok "schema reset complete ($(grep -oE 'DROPPED=[0-9]+' "$tmp" | tail -1), $(grep -oE 'TABLES_LEFT=[0-9]+' "$tmp" | tail -1))"
+  rm -f "$tmp"
+fi
 
 FILES=(01_schema.sql 05_automation_schema.sql 07_traceability_schema.sql 02_plsql.sql 06_automation_plsql.sql 08_traceability_plsql.sql 03_seed.sql 09_traceability_seed.sql 10_helpdesk_schema.sql 11_rbac_seed.sql)
 [ "$WITH_INCIDENT" = "1" ] && FILES+=(04_incident_scenarios.sql)
