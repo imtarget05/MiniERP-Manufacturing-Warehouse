@@ -139,7 +139,7 @@ STOCK_BEFORE="$(sql_eval "SELECT 'STOCK=' || QTY FROM STOCK S JOIN ITEM I ON I.I
 for format in HTML ZPL HTML; do
   request POST /api/labels "{\"entityType\":\"LOT\",\"entityKey\":\"$PASS_ACTIVE\",\"labelType\":\"RAW_MATERIAL\",\"copies\":1,\"format\":\"$format\"}"
   expect "create/reprint label $format" 200
-  save_response "07-label-$format-${format}-$(date +%s%N).json"
+  save_response "07-label-$format-$(date +%s%N).json"
 done
 STOCK_AFTER="$(sql_eval "SELECT 'STOCK=' || QTY FROM STOCK S JOIN ITEM I ON I.ID=S.ITEM_ID JOIN WAREHOUSE W ON W.ID=S.WAREHOUSE_ID WHERE W.CODE='WH_RAW' AND I.CODE='MAT_RUBBER_01';")"
 check_eq "label reprints did not change aggregate stock" "$STOCK_BEFORE" "$STOCK_AFTER"
