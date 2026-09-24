@@ -24,6 +24,7 @@
         <button class="nav-item active" data-tab="tab-overview">Tổng quan</button>
         <button class="nav-item" data-tab="tab-stock">Kho &amp; Tồn kho</button>
         <button class="nav-item" data-tab="tab-mfg">Sản xuất &amp; BOM</button>
+        <button class="nav-item" data-tab="tab-lots">Nhận hàng &amp; Lots</button>
         <button class="nav-item" data-tab="tab-incident">Sự cố PO001</button>
       </nav>
       <div class="sidebar-footer">
@@ -36,6 +37,17 @@
             <button class="btn btn-secondary btn-sm" id="btn-check-api" type="button">Kiểm tra</button>
           </div>
           <p class="text-muted small">Kết nối ASP.NET Core 8 &amp; Oracle Database 21c.</p>
+          <div class="auth-box" aria-label="Đăng nhập ERP">
+            <label for="auth-username">Tài khoản ERP</label>
+            <input id="auth-username" value="admin" autocomplete="username" spellcheck="false">
+            <label for="auth-password">Mật khẩu</label>
+            <input id="auth-password" type="password" autocomplete="current-password" placeholder="Nhập khi cần mutation">
+            <div class="api-row">
+              <button class="btn btn-primary btn-sm" id="btn-login" type="button">Đăng nhập</button>
+              <button class="btn btn-secondary btn-sm" id="btn-logout" type="button">Đăng xuất</button>
+            </div>
+            <p id="auth-status" class="text-muted small">Chưa đăng nhập</p>
+          </div>
         </div>
       </div>
     </aside>
@@ -199,6 +211,88 @@
             <div class="card-head"><h3>Nhật ký lỗi ERP</h3><span class="card-hint">GET /api/support/errors</span></div>
             <div id="error-list" class="recent-list"></div>
           </div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><h3>Phân bổ FEFO cho lệnh sản xuất</h3><span class="card-hint">GET /api/manufacturing/production-order/{po}/allocate-lots</span></div>
+          <form id="alloc-form" class="form-grid">
+            <div class="form-group"><label>Mã lệnh (PO)</label><input id="a-po" value="PO001" required></div>
+            <div class="modal-actions" style="border:none;padding:0;margin:0">
+              <button class="btn btn-secondary" type="submit">Xem phân bổ lô</button>
+            </div>
+          </form>
+          <div id="alloc-result" class="recent-list"></div>
+        </div>
+      </section>
+
+      <section id="tab-lots" class="tab-pane">
+        <div class="card">
+          <div class="card-head"><h3>Nhận hàng theo Lot (PO → Lot → Label)</h3><span class="card-hint">POST /api/warehouse/receipts/{po}/receive</span></div>
+          <form id="lot-form" class="form-grid">
+            <div class="form-group"><label>PO mua hàng</label><input id="l-po" value="PO_PUR_LOT_01" required></div>
+            <div class="form-group"><label>Mã vật tư</label><input id="l-item" value="MAT_RUBBER_01" required></div>
+            <div class="form-group"><label>Số lượng</label><input id="l-qty" type="number" min="1" value="100" required></div>
+            <div class="form-group"><label>Mã lot</label><input id="l-lot" value="RM001-DEMO-001" required></div>
+            <div class="form-group"><label>Vị trí nhận</label><input id="l-loc" value="RCV-01" required></div>
+            <div class="form-group"><label>Idempotency key</label><input id="l-idem" value="recv-demo-001" required></div>
+            <div class="modal-actions" style="border:none;padding:0;margin:0"><button class="btn btn-primary" type="submit">Nhận hàng</button></div>
+          </form>
+          <p id="lot-msg" class="form-hint"></p>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><h3>Scan &amp; di chuyển (quét Lot → điểm đến → số lượng)</h3><span class="card-hint">POST /api/warehouse/putaway • /move</span></div>
+          <form id="move-form" class="form-grid">
+            <div class="form-group"><label>Quét lot</label><input id="m-lot" placeholder="LOT:RM001-DEMO-001 — Enter để tra cứu" required></div>
+            <div class="form-group"><label>Kho nguồn</label><input id="m-fromwh" value="WH_RAW"></div>
+            <div class="form-group"><label>Vị trí nguồn</label><input id="m-fromloc" value="RCV-01" required></div>
+            <div class="form-group"><label>Kho đích</label><input id="m-towh" value="WH_RAW"></div>
+            <div class="form-group"><label>Vị trí đích</label><input id="m-toloc" value="A-01-01" required></div>
+            <div class="form-group"><label>Số lượng</label><input id="m-qty" type="number" min="1" value="100" required></div>
+            <div class="form-group"><label>Idempotency key</label><input id="m-idem" value="move-demo-001" required></div>
+            <div class="modal-actions" style="border:none;padding:0;margin:0">
+              <button class="btn btn-secondary" type="button" id="btn-resolve">Tra cứu scan</button>
+              <button class="btn btn-primary" type="submit">Xác nhận</button>
+            </div>
+          </form>
+          <p id="move-msg" class="form-hint"></p>
+          <div id="scan-result" class="recent-list"></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><h3>In nhãn lot (label workflow)</h3><span class="card-hint">POST /api/labels • reprint = job mới, không tạo lot/không đụng tồn kho</span></div>
+          <form id="label-form" class="form-grid">
+            <div class="form-group"><label>Mã lot (entityKey)</label><input id="lb-lot" value="RM001-DEMO-001" required></div>
+            <div class="form-group"><label>Loại nhãn</label>
+              <select id="lb-type">
+                <option value="RAW_MATERIAL">RAW_MATERIAL</option>
+                <option value="FINISHED_GOOD">FINISHED_GOOD</option>
+                <option value="LOCATION">LOCATION</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Số bản</label><input id="lb-copies" type="number" min="1" value="1"></div>
+            <div class="form-group"><label>Định dạng</label>
+              <select id="lb-format"><option value="HTML">HTML</option><option value="ZPL">ZPL</option></select>
+            </div>
+            <div class="modal-actions" style="border:none;padding:0;margin:0">
+              <button class="btn btn-primary" type="submit">In nhãn</button>
+            </div>
+          </form>
+          <div id="label-result" class="recent-list"></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><h3>Trace genealogy (lùi / xuôi)</h3><span class="card-hint">GET /api/trace/{lotCode}?direction=backward|forward|both</span></div>
+          <form id="trace-form" class="form-grid">
+            <div class="form-group"><label>Mã lot</label><input id="t-lot" value="RM001-DEMO-001" required></div>
+            <div class="form-group"><label>Hướng</label>
+              <select id="t-dir">
+                <option value="both">Cả hai</option>
+                <option value="backward">Lùi (nguyên liệu đầu vào)</option>
+                <option value="forward">Xuôi (thành phẩm đầu ra)</option>
+              </select>
+            </div>
+            <div class="modal-actions" style="border:none;padding:0;margin:0">
+              <button class="btn btn-primary" type="submit">Tra cứu genealogy</button>
+            </div>
+          </form>
+          <div id="trace-result" class="recent-list"></div>
         </div>
       </section>
 

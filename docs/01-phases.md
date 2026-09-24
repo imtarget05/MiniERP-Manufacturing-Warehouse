@@ -32,8 +32,8 @@ Phase 4: ERP Operations & Incident Runbook
   └── Change Request & Data Fix Workflow (CHANGE_REQUEST)
 
 Phase 5: Interview & Portfolio Packaging
-  ├── English CV Experience Descriptions (docs/06-interview-and-cv-en.md)
-  └── Technical Defense Q&A for TKG Taekwang ERP Role
+  ├── 20-section portfolio README with Mermaid diagrams (README.md)
+  └── Scripted recruiter walkthrough + technical defense notes (docs/demo/recruiter-demo.md)
 ```
 
 ---

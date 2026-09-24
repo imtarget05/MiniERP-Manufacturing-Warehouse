@@ -53,6 +53,9 @@ public static class ErpErrorMapper
         [20010] = "ERR_APPROVAL_REQUIRED",
         [20011] = "ERR_AUTOMATION_STATE",
         [20012] = "ERR_INVALID_INPUT",
+        // --- traceability layer (package ERP_TRACEABILITY) ---
+        [20013] = "ERR_IDEMPOTENCY_CONFLICT",
+        [20014] = "ERR_DUPLICATE_REPLAY",
     };
 
     public static int Normalize(int oraNumber) => Math.Abs(oraNumber);

@@ -24,6 +24,8 @@ public class ErpErrorMapperTests
     [InlineData(20010, "ERR_APPROVAL_REQUIRED")]
     [InlineData(20011, "ERR_AUTOMATION_STATE")]
     [InlineData(20012, "ERR_INVALID_INPUT")]
+    [InlineData(20013, "ERR_IDEMPOTENCY_CONFLICT")]
+    [InlineData(20014, "ERR_DUPLICATE_REPLAY")]
     public void BusinessCodeFor_KnownOracleNumbers_ReturnsDocumentedCode(int oraNumber, string expected)
     {
         Assert.Equal(expected, ErpErrorMapper.BusinessCodeFor(oraNumber));
@@ -136,5 +138,30 @@ public class ErpApiPresenterTests
         var action = ErpApiPresenter.ActionFor("ERR_AUTOMATION_STATE", "PO-9");
         Assert.Contains("/api/automation/runs", action);
         Assert.Contains("PO-9", action);
+    }
+
+    [Fact]
+    public void GetIncidentsSql_AliasesAllDapperConstructorColumns()
+    {
+        var root = FindRepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(root, "src", "Services", "ErpDbService.cs"));
+        var helpdesk = File.ReadAllText(Path.Combine(root, "src", "Services", "ErpDbService.Helpdesk.cs"));
+        Assert.Contains("ERROR_CODE AS ErrorCode", source, StringComparison.Ordinal);
+        Assert.Contains("REF_NO AS RefNo", source, StringComparison.Ordinal);
+        Assert.Contains("CONTEXT_JSON AS ContextJson", source, StringComparison.Ordinal);
+        Assert.Contains("CREATED_BY AS CreatedBy", source, StringComparison.Ordinal);
+        Assert.Contains("CREATED_AT AS CreatedAt", source, StringComparison.Ordinal);
+        Assert.Contains("ATTEMPT_COUNT AS AttemptCount", helpdesk, StringComparison.Ordinal);
+        Assert.Contains("HELPDESK_DELIVERY", helpdesk, StringComparison.Ordinal);
+        Assert.Contains("CASE WHEN :Status = 'SENT' THEN SYSDATE ELSE NULL END", helpdesk,
+            StringComparison.Ordinal);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "src", "Program.cs")))
+            directory = directory.Parent;
+        return directory?.FullName ?? throw new DirectoryNotFoundException("Repository root not found.");
     }
 }

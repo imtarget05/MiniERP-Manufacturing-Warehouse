@@ -35,12 +35,30 @@ public class AutomationIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         TestStockFixture.Reset(Client());
     }
 
-    private HttpClient Client() => _factory.CreateClient();
+    private HttpClient RawClient() => _factory.CreateClient();
+
+    private HttpClient Client()
+    {
+        var client = RawClient();
+        var login = client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest("admin", "Admin@123")).GetAwaiter().GetResult();
+        if (!login.IsSuccessStatusCode)
+        {
+            throw new Xunit.Sdk.XunitException(
+                "Demo admin login failed. Run scripts/run-sql.sh after the Phase 5 seed: " +
+                $"{login.StatusCode} {login.Content.ReadAsStringAsync().GetAwaiter().GetResult()}");
+        }
+        var payload = login.Content.ReadFromJsonAsync<LoginResponse>(Web).GetAwaiter().GetResult()
+            ?? throw new Xunit.Sdk.XunitException("Login response was empty.");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", payload.AccessToken);
+        return client;
+    }
 
     /// <summary>Fails fast with an actionable message when Oracle is not up.</summary>
     private void EnsureDatabaseConfigured()
     {
-        var res = Client().GetAsync("/api/health").GetAwaiter().GetResult();
+        var res = RawClient().GetAsync("/api/health").GetAwaiter().GetResult();
         if (res.StatusCode == HttpStatusCode.ServiceUnavailable)
         {
             var body = res.Content.ReadAsStringAsync().GetAwaiter().GetResult();

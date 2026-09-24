@@ -1,0 +1,10 @@
+backup_dir=/tmp/minierp-dr-final/backup_20260924_191136
+safety_lock=PASS (missing ALLOW_DESTRUCTIVE_RESTORE=true rejected exit 1)
+  OK     Traceability query returned 	9 lot(s); backup metadata expected 9.
+  OK     Schema table count passed (31 >= 31)
+  OK     Package body ERP_OPERATIONS is VALID
+  OK     Package body ERP_AUTOMATION is VALID
+  OK     Package body ERP_TRACEABILITY is VALID
+  OK     ALL VERIFICATION CHECKS PASSED: Database schema and backup are valid.
+  OK     Database restore completed and verified successfully.
+impdp_log=/Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/artifacts/restore-20260924_193134.log

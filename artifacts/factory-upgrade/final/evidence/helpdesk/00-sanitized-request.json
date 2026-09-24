@@ -1,0 +1,12 @@
+{
+  "externalRef": "ERP-ONLINE-1790253836",
+  "category": "ERP",
+  "service": "Warehouse/Manufacturing",
+  "severity": "HIGH",
+  "title": "[REDACTED]",
+  "description": "[REDACTED] sanitized test description",
+  "referenceType": "SUPPORT_INCIDENT",
+  "referenceNo": "PO-HD-ONLINE",
+  "correlationId": "online-check-001",
+  "occurredAt": "2026-09-24T19:40:00Z"
+}

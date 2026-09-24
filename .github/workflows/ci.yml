@@ -49,7 +49,7 @@ jobs:
       - name: Make Scripts Executable
         run: chmod +x scripts/*.sh
 
-      - name: Run Full Acceptance Pipeline (7 Stages)
+      - name: Run Full Acceptance Pipeline (9 Stages)
         run: bash scripts/run-all-tests.sh
 
       - name: Archive Test & Execution Artifacts
@@ -59,3 +59,20 @@ jobs:
           name: acceptance-artifacts
           path: artifacts/
           retention-days: 7
+
+  docker-build-verification:
+    name: 3. Container Build Verification
+    runs-on: ubuntu-latest
+    needs: build-and-unit-tests
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: actions/setup-buildx-action@v3
+
+      - name: Build API Docker Image
+        run: docker build -t minierp-api:ci-test -f src/Dockerfile src/
+
+      - name: Build UI Docker Image
+        run: docker build -t minierp-ui:ci-test -f dashboard/Dockerfile dashboard/

@@ -9,7 +9,9 @@
 #            4  dotnet restore + build (Release)
 #            5  dotnet test  (unit + integration against the live database)
 #            6  start the API and run the endpoint smoke test (curl level)
-#            7  export artifacts/swagger.json as the acceptance evidence
+#            7  run the real traceability E2E workflow
+#            8  create a fresh backup and verify the active schema (non-destructive)
+#            9  export artifacts/swagger.json as the acceptance evidence
 # USAGE:   bash scripts/run-all-tests.sh
 #          SKIP_DOCKER=1 bash scripts/run-all-tests.sh   (container already up)
 #          KEEP_API=1    bash scripts/run-all-tests.sh   (leave the API running)
@@ -51,17 +53,17 @@ printf '%b\n' "${C_B}###########################################################
 
 # ---------------------------------------------------------------- 1 database
 if [ "${SKIP_DOCKER:-0}" != "1" ]; then
-  stage "1/7 start Oracle container (docker compose up -d)" bash "$HERE/start-db.sh" || true
+  stage "1/9 start Oracle container (docker compose up -d)" bash "$HERE/start-db.sh" || true
 else
-  log "1/7 docker start skipped (SKIP_DOCKER=1)"
+  log "1/9 docker start skipped (SKIP_DOCKER=1)"
   wait_for_db "${DB_TIMEOUT:-120}" || true
 fi
 
 # --------------------------------------------------------------------- 2 SQL
-stage "2/7 load schema + package + seed data" bash "$HERE/run-sql.sh" || true
+stage "2/9 load schema + package + seed data" bash "$HERE/run-sql.sh" || true
 
 # ----------------------------------------------------------------- 3 incident
-stage "3/7 verify the PO001 incident scenario (PL/SQL)" bash "$HERE/test-incident.sh" || true
+stage "3/9 verify the PO001 incident scenario (PL/SQL)" bash "$HERE/test-incident.sh" || true
 
 # -------------------------------------------------------------- 4 build .NET
 run_build() {
@@ -82,7 +84,7 @@ run_build() {
                 || err "build failed (warnings are treated as errors)"
   return $rc
 }
-stage "4/7 dotnet restore + build (Release, warnings as errors)" run_build || true
+stage "4/9 dotnet restore + build (Release, warnings as errors)" run_build || true
 
 # ------------------------------------------------------------------ 5 dotnet test
 run_dotnet_test() {
@@ -96,7 +98,7 @@ run_dotnet_test() {
   rm -f "$out"
   return $rc
 }
-stage "5/7 dotnet test (unit + integration)" run_dotnet_test || true
+stage "5/9 dotnet test (unit + integration)" run_dotnet_test || true
 
 # -------------------------------------------------------- 6 API smoke test
 run_api_smoke() {
@@ -106,10 +108,69 @@ run_api_smoke() {
   archive_artifact "api-server" "$REPO_ROOT/artifacts/api.log" 'Exception|error'
   return $rc
 }
-stage "6/7 API endpoint smoke test (curl, 15 routes)" run_api_smoke || true
+stage "6/9 API endpoint smoke test (curl, authenticated routes)" run_api_smoke || true
 
-# ----------------------------------------------------------------- 7 swagger
-stage "7/7 export swagger.json evidence" bash "$HERE/export-swagger.sh" || true
+# --------------------------------------------------------- 7 traceability E2E
+run_traceability_e2e() {
+  bash "$HERE/run-sql.sh" || return 1
+  RUN_MODE=bg bash "$HERE/start-api.sh" || return 1
+  bash "$HERE/test-traceability.sh" "$BASE_URL"
+}
+stage "7/9 real traceability E2E (receive -> trace -> genealogy -> reconcile)" run_traceability_e2e || true
+
+# ------------------------------------------------------- 8 backup + verify
+run_restore_safety_lock_check() {
+  local log combined
+  log="$(mktemp)"
+  combined="$(mktemp)"
+
+  # Layer 1: the destructive flag must be explicit.
+  if env -u ALLOW_DESTRUCTIVE_RESTORE -u CONFIRM_RESTORE \
+      bash "$HERE/restore-db.sh" "$REPO_ROOT" >"$log" 2>&1; then
+    err "restore unexpectedly succeeded without the destructive flag"
+    rm -f "$log" "$combined"
+    return 1
+  fi
+  if ! grep -q "SAFETY LOCK.*ALLOW_DESTRUCTIVE_RESTORE" "$log"; then
+    err "restore did not reject the missing destructive flag"
+    cat "$log" >&2
+    rm -f "$log" "$combined"
+    return 1
+  fi
+  ok "restore safety lock rejected a missing ALLOW_DESTRUCTIVE_RESTORE flag"
+
+  # Layer 2: confirmation is independently required even after the allow flag.
+  if env -u CONFIRM_RESTORE ALLOW_DESTRUCTIVE_RESTORE=true \
+      bash "$HERE/restore-db.sh" "$REPO_ROOT" >"$log" 2>&1; then
+    err "restore unexpectedly succeeded without confirmation"
+    rm -f "$log" "$combined"
+    return 1
+  fi
+  if ! grep -q "SAFETY LOCK.*CONFIRM_RESTORE" "$log"; then
+    err "restore did not reject the missing confirmation flag"
+    cat "$log" >&2
+    rm -f "$log" "$combined"
+    return 1
+  fi
+  ok "restore safety lock rejected a missing CONFIRM_RESTORE flag"
+
+  cat "$log" > "$combined"
+  archive_artifact "restore-safety-lock" "$combined" 'SAFETY LOCK'
+  rm -f "$log" "$combined"
+}
+
+run_backup_verify() {
+  local backup_dir
+  backup_dir="$(mktemp -d "${TMPDIR:-/tmp}/minierp-acceptance-backup.XXXXXX")"
+  bash "$HERE/backup-db.sh" "$backup_dir" || return 1
+  bash "$HERE/verify-backup.sh" || return 1
+  run_restore_safety_lock_check || return 1
+  ok "Fresh backup, schema verification and restore safety checks passed: $backup_dir"
+}
+stage "8/9 fresh backup + non-destructive verification + restore safety locks" run_backup_verify || true
+
+# ----------------------------------------------------------------- 9 swagger
+stage "9/9 export swagger.json evidence" bash "$HERE/export-swagger.sh" || true
 
 # ------------------------------------------------------------------- summary
 END=$(date +%s)
@@ -124,6 +185,6 @@ if [ -n "$FAILED_STAGES" ]; then
   printf '%b\n' "  logs: artifacts/*.log"
   exit 1
 fi
-printf '%b\n' "${C_G} RESULT: ALL 7 STAGES PASSED - the system is verified end to end${C_0}"
+printf '%b\n' "${C_G} RESULT: ALL 9 STAGES PASSED - the system is verified end to end${C_0}"
 printf '%b\n' "  evidence: artifacts/  (sql-*, incident-*, build-*, dotnet-test-*, api-*, swagger.json)"
 rule

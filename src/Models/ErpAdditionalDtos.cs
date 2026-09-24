@@ -179,7 +179,8 @@ public record IncidentContextResponse(
     string ReferenceNo,
     string Status,
     string Diagnosis,
-    string? ContextJson
+    string? ContextJson,
+    HelpdeskDeliveryResult? HelpdeskDelivery = null
 );
 
 public record ApprovalResponse(
@@ -203,7 +204,9 @@ public record CollectIncidentRequest(
     string ReferenceNo,
     string? ErrorCode = "ERR_MATERIAL_SHORTAGE",
     string? Title = null,
-    string User = "system"
+    string User = "system",
+    string? Severity = null,
+    string? Description = null
 );
 
 public record CreateApprovalRequest(

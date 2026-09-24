@@ -2,10 +2,147 @@
   "openapi": "3.0.1",
   "info": {
     "title": "Mini ERP API — Manufacturing & Warehouse Execution",
-    "description": "Core REST API connecting ASP.NET Core (.NET 8) to Oracle Database 19c/21c/23c through the PL/SQL package ERP_OPERATIONS (Dapper micro-ORM).",
+    "description": "Core REST API connecting ASP.NET Core (.NET 8) to Oracle Database 19c/21c/23c through the PL/SQL packages (Dapper micro-ORM).",
     "version": "v1"
   },
   "paths": {
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "Administration"
+        ],
+        "operationId": "AdminGetUsers",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Administration"
+        ],
+        "operationId": "AdminCreateUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "Login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "RefreshToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/auth/revoke": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "RevokeToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "Logout",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "Me",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
     "/api/automation/production-order/{poNo}/material-check": {
       "post": {
         "tags": [
@@ -18,14 +155,6 @@
             "in": "path",
             "required": true,
             "style": "simple",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "style": "form",
             "schema": {
               "type": "string"
             }
@@ -53,14 +182,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "style": "form",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -85,14 +206,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "style": "form",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -114,14 +227,6 @@
             "in": "path",
             "required": true,
             "style": "simple",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "style": "form",
             "schema": {
               "type": "string"
             }
@@ -163,16 +268,6 @@
           "Automation"
         ],
         "operationId": "SweepReplenishment",
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "style": "form",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Success"
@@ -226,14 +321,6 @@
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "style": "form",
-            "schema": {
-              "type": "string"
             }
           }
         ],
@@ -300,14 +387,6 @@
             "schema": {
               "type": "string",
               "format": "date-time"
-            }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "style": "form",
-            "schema": {
-              "type": "string"
             }
           }
         ],
@@ -641,6 +720,155 @@
         }
       }
     },
+    "/api/integration/helpdesk/incidents": {
+      "post": {
+        "tags": [
+          "Integration"
+        ],
+        "operationId": "ForwardHelpdeskIncident",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HelpdeskIncidentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/integration/helpdesk/deliveries/{externalRef}": {
+      "get": {
+        "tags": [
+          "Integration"
+        ],
+        "operationId": "GetHelpdeskDelivery",
+        "parameters": [
+          {
+            "name": "externalRef",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/labels": {
+      "post": {
+        "tags": [
+          "Labels"
+        ],
+        "operationId": "CreateLabelJob",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLabelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Labels"
+        ],
+        "operationId": "GetLabelJobs",
+        "parameters": [
+          {
+            "name": "entityType",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityKey",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/labels/{id}": {
+      "get": {
+        "tags": [
+          "Labels"
+        ],
+        "operationId": "GetLabelJob",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/labels/{id}/render": {
+      "get": {
+        "tags": [
+          "Labels"
+        ],
+        "operationId": "RenderLabelJob",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
     "/api/manufacturing/bom/line": {
       "post": {
         "tags": [
@@ -726,14 +954,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "style": "form",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -775,16 +995,100 @@
             "schema": {
               "type": "string"
             }
-          },
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/manufacturing/production-order/{poNo}/allocate-lots": {
+      "get": {
+        "tags": [
+          "Manufacturing"
+        ],
+        "operationId": "AllocateLots",
+        "parameters": [
           {
-            "name": "user",
-            "in": "query",
-            "style": "form",
+            "name": "poNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
             "schema": {
               "type": "string"
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/manufacturing/production-order/{poNo}/issue-lots": {
+      "post": {
+        "tags": [
+          "Manufacturing"
+        ],
+        "operationId": "IssueLots",
+        "parameters": [
+          {
+            "name": "poNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueLotsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/manufacturing/production-order/{poNo}/complete-traceable": {
+      "post": {
+        "tags": [
+          "Manufacturing"
+        ],
+        "operationId": "CompleteTraceable",
+        "parameters": [
+          {
+            "name": "poNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteTraceableRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Success"
@@ -830,14 +1134,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "user",
-            "in": "query",
-            "style": "form",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -853,6 +1149,64 @@
           "Support"
         ],
         "operationId": "Health",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/health/ready": {
+      "get": {
+        "tags": [
+          "Support"
+        ],
+        "operationId": "Readiness",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/health/details": {
+      "get": {
+        "tags": [
+          "Support"
+        ],
+        "operationId": "HealthDetails",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/trace/{lotCode}": {
+      "get": {
+        "tags": [
+          "Traceability"
+        ],
+        "operationId": "TraceLot",
+        "parameters": [
+          {
+            "name": "lotCode",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success"
@@ -966,6 +1320,262 @@
           }
         }
       }
+    },
+    "/api/warehouse/{warehouseCode}/locations": {
+      "get": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "GetLocations",
+        "parameters": [
+          {
+            "name": "warehouseCode",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "EnsureLocation",
+        "parameters": [
+          {
+            "name": "warehouseCode",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/warehouse/lots/{lotCode}": {
+      "get": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "GetLot",
+        "parameters": [
+          {
+            "name": "lotCode",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/warehouse/lots/{lotCode}/stock": {
+      "get": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "GetLotStock",
+        "parameters": [
+          {
+            "name": "lotCode",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/warehouse/receipts/{purchaseOrderNo}/receive": {
+      "post": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "ReceiveLot",
+        "parameters": [
+          {
+            "name": "purchaseOrderNo",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiveLotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/warehouse/putaway": {
+      "post": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "PutawayLot",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutawayLotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/warehouse/move": {
+      "post": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "MoveLot",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveLotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/warehouse/lots/{lotCode}/hold": {
+      "post": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "HoldLot",
+        "parameters": [
+          {
+            "name": "lotCode",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/warehouse/lots/{lotCode}/release-hold": {
+      "post": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "ReleaseLotHold",
+        "parameters": [
+          {
+            "name": "lotCode",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/barcodes/resolve/{code}": {
+      "get": {
+        "tags": [
+          "Warehouse"
+        ],
+        "operationId": "ResolveBarcode",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1040,6 +1650,14 @@
           "user": {
             "type": "string",
             "nullable": true
+          },
+          "severity": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -1059,6 +1677,38 @@
             "nullable": true
           },
           "message": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CompleteTraceableRequest": {
+        "type": "object",
+        "properties": {
+          "fgLot": {
+            "type": "string",
+            "nullable": true
+          },
+          "qty": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "locationCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "tolerance": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "outputWarehouseCode": {
             "type": "string",
             "nullable": true
           }
@@ -1125,6 +1775,50 @@
         },
         "additionalProperties": false
       },
+      "CreateLabelRequest": {
+        "type": "object",
+        "properties": {
+          "entityType": {
+            "type": "string",
+            "nullable": true
+          },
+          "entityKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "labelType": {
+            "type": "string",
+            "nullable": true
+          },
+          "copies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "format": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateLocationRequest": {
+        "type": "object",
+        "properties": {
+          "locationCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "locationName": {
+            "type": "string",
+            "nullable": true
+          },
+          "locationType": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateProductionOrderRequest": {
         "type": "object",
         "properties": {
@@ -1168,6 +1862,35 @@
           },
           "warehouseCode": {
             "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          },
+          "fullName": {
+            "type": "string",
+            "nullable": true
+          },
+          "department": {
+            "type": "string",
+            "nullable": true
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           }
         },
@@ -1220,6 +1943,186 @@
         },
         "additionalProperties": false
       },
+      "HelpdeskIncidentRequest": {
+        "type": "object",
+        "properties": {
+          "externalRef": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "service": {
+            "type": "string",
+            "nullable": true
+          },
+          "severity": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "referenceType": {
+            "type": "string",
+            "nullable": true
+          },
+          "referenceNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueLotsRequest": {
+        "type": "object",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MoveLotRequest": {
+        "type": "object",
+        "properties": {
+          "lotCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "fromWarehouseCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "fromLocationCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "toWarehouseCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "toLocationCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "qty": {
+            "type": "number",
+            "format": "double"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PutawayLotRequest": {
+        "type": "object",
+        "properties": {
+          "lotCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "fromLocationCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "toLocationCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "qty": {
+            "type": "number",
+            "format": "double"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReceiveLotRequest": {
+        "type": "object",
+        "properties": {
+          "itemCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "qty": {
+            "type": "number",
+            "format": "double"
+          },
+          "lotCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "supplierLotNo": {
+            "type": "string",
+            "nullable": true
+          },
+          "mfgDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "expiryDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "receivingLocationCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RefreshTokenRequest": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ReplenishmentEvalRequest": {
         "type": "object",
         "properties": {
@@ -1236,6 +2139,16 @@
             "nullable": true
           },
           "user": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RevokeTokenRequest": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
             "type": "string",
             "nullable": true
           }

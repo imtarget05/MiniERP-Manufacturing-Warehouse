@@ -11,19 +11,38 @@ namespace MiniERP.Api.Services;
 /// Oracle business errors are translated into <see cref="ErpBusinessException"/>
 /// with a stable error code (see docs/04-plsql-spec.md section 4).
 /// </summary>
-public class ErpDbService
+public partial class ErpDbService
 {
     private readonly string _connectionString;
     private readonly ILogger<ErpDbService> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public ErpDbService(IConfiguration configuration, ILogger<ErpDbService> logger)
+    public ErpDbService(
+        IConfiguration configuration,
+        ILogger<ErpDbService> logger,
+        IHttpContextAccessor httpContextAccessor)
     {
         _connectionString = configuration.GetConnectionString("OracleDb")
             ?? throw new InvalidOperationException("Connection string 'OracleDb' not configured.");
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     private IDbConnection CreateConnection() => new OracleConnection(_connectionString);
+
+    public string ResolveActor(string? supplied = null) => CurrentActor(supplied);
+
+    private string CurrentActor(string? supplied = null)
+    {
+        var principalName = _httpContextAccessor.HttpContext?.User.Identity?.Name;
+        if (_httpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated == true &&
+            !string.IsNullOrWhiteSpace(principalName))
+        {
+            return principalName!;
+        }
+
+        return string.IsNullOrWhiteSpace(supplied) ? "system" : supplied.Trim();
+    }
 
     /// <summary>
     /// Execute a parameterless-ish PL/SQL procedure of package ERP_OPERATIONS.
@@ -131,7 +150,7 @@ public class ErpDbService
             p_item_code = req.ItemCode,
             p_qty = req.Quantity,
             p_ref_no = req.ReferenceNo,
-            p_user = req.User,
+            p_user = ResolveActor(req.User),
         }), "create_stock_in");
 
     public Task ExecuteStockOutAsync(StockOutRequest req) => ExecuteProcedureAsync(
@@ -142,7 +161,7 @@ public class ErpDbService
             p_item_code = req.ItemCode,
             p_qty = req.Quantity,
             p_ref_no = req.ReferenceNo,
-            p_user = req.User,
+            p_user = ResolveActor(req.User),
         }), "create_stock_out");
 
     public Task SaveBomLineAsync(BomLineRequest req) => ExecuteProcedureAsync(
@@ -153,7 +172,7 @@ public class ErpDbService
             p_version = req.Version,
             p_mat_code = req.MaterialCode,
             p_qty_req = req.QuantityRequired,
-            p_user = req.User,
+            p_user = ResolveActor(req.User),
         }), "save_bom_line");
 
     public Task CreateProductionOrderAsync(CreateProductionOrderRequest req) => ExecuteProcedureAsync(
@@ -164,22 +183,22 @@ public class ErpDbService
             p_fg_code = req.FinishedGoodCode,
             p_qty = req.PlannedQuantity,
             p_wh_code = req.WarehouseCode,
-            p_user = req.User,
+            p_user = ResolveActor(req.User),
         }), "create_production_order");
 
     public Task CompleteProductionOrderAsync(string poNo, string user) => ExecuteProcedureAsync(
         "ERP_OPERATIONS.complete_production_order",
-        () => new DynamicParameters(new { p_po_no = poNo, p_user = user }),
+        () => new DynamicParameters(new { p_po_no = poNo, p_user = ResolveActor(user) }),
         "complete_production_order");
 
     public Task CancelProductionOrderAsync(string poNo, string user) => ExecuteProcedureAsync(
         "ERP_OPERATIONS.cancel_production_order",
-        () => new DynamicParameters(new { p_po_no = poNo, p_user = user }),
+        () => new DynamicParameters(new { p_po_no = poNo, p_user = ResolveActor(user) }),
         "cancel_production_order");
 
     public Task ReceivePurchaseOrderAsync(string poNo, string user) => ExecuteProcedureAsync(
         "ERP_OPERATIONS.receive_purchase_order",
-        () => new DynamicParameters(new { p_po_no = poNo, p_user = user }),
+        () => new DynamicParameters(new { p_po_no = poNo, p_user = ResolveActor(user) }),
         "receive_purchase_order");
 
     // ============================================================= AUTOMATION
@@ -215,6 +234,7 @@ public class ErpDbService
     /// <summary>W1: material availability check; returns the resulting PO status.</summary>
     public async Task<string> CheckMaterialAvailabilityAsync(string poNo, string user)
     {
+        user = ResolveActor(user);
         var status = await ExecuteProcedureWithOutAsync<string>(
             "ERP_AUTOMATION.check_material_availability",
             () =>
@@ -229,24 +249,26 @@ public class ErpDbService
 
     public Task ReserveMaterialsAsync(string poNo, string user) => ExecuteProcedureAsync(
         "ERP_AUTOMATION.reserve_materials",
-        () => new DynamicParameters(new { p_po_no = poNo, p_user = user }),
+        () => new DynamicParameters(new { p_po_no = poNo, p_user = ResolveActor(user) }),
         "reserve_materials");
 
     public Task ReleaseReservationsAsync(string poNo, string user) => ExecuteProcedureAsync(
         "ERP_AUTOMATION.release_reservations",
-        () => new DynamicParameters(new { p_po_no = poNo, p_user = user }),
+        () => new DynamicParameters(new { p_po_no = poNo, p_user = ResolveActor(user) }),
         "release_reservations");
 
     /// <summary>W4: transactional completion wrapper (reservations + stock in one tx).</summary>
     public Task CompleteReservedOrderAsync(string poNo, string user) => ExecuteProcedureAsync(
         "ERP_AUTOMATION.complete_reserved_order",
-        () => new DynamicParameters(new { p_po_no = poNo, p_user = user }),
+        () => new DynamicParameters(new { p_po_no = poNo, p_user = ResolveActor(user) }),
         "complete_reserved_order");
 
     /// <summary>W3: replenishment rule for one line; returns suggested qty.</summary>
     public Task<decimal> EvaluateReplenishmentAsync(
         string itemCode, string warehouseCode, string trigger, string user)
-        => ExecuteProcedureWithOutAsync<decimal>(
+    {
+        user = ResolveActor(user);
+        return ExecuteProcedureWithOutAsync<decimal>(
             "ERP_AUTOMATION.evaluate_replenishment",
             () =>
             {
@@ -261,10 +283,12 @@ public class ErpDbService
                     direction: ParameterDirection.Output);
                 return p;
             }, "p_suggested", "evaluate_replenishment");
+    }
 
-    /// <summary>W3 batch sweep; returns the number of OPEN alerts afterwards.</summary>
+    /// <summary>W3 batch sweep; returns the number of OPEN alert rows.</summary>
     public async Task<int> SweepReplenishmentAsync(string user)
     {
+        user = ResolveActor(user);
         var alerts = await ExecuteProcedureWithOutAsync<decimal>(
             "ERP_AUTOMATION.sweep_replenishment",
             () =>
@@ -280,6 +304,7 @@ public class ErpDbService
     /// <summary>W5: stale PO detection run; returns the stale order count.</summary>
     public async Task<int> DetectStaleOrdersAsync(int days, string user)
     {
+        user = ResolveActor(user);
         var count = await ExecuteProcedureWithOutAsync<decimal>(
             "ERP_AUTOMATION.detect_stale_orders",
             () =>
@@ -296,6 +321,7 @@ public class ErpDbService
     public async Task<long> GenerateReportAsync(
         string reportType, DateTime? periodFrom, DateTime? periodTo, string user)
     {
+        user = ResolveActor(user);
         var id = await ExecuteProcedureWithOutAsync<decimal>(
             "ERP_AUTOMATION.generate_report",
             () =>
@@ -318,6 +344,7 @@ public class ErpDbService
     public async Task<long> CollectIncidentContextAsync(
         string refNo, string errorCode, string title, string user)
     {
+        user = ResolveActor(user);
         var id = await ExecuteProcedureWithOutAsync<decimal>(
             "ERP_AUTOMATION.collect_incident_context",
             () =>
@@ -345,7 +372,7 @@ public class ErpDbService
             p_action = action,
             p_ref_no = string.IsNullOrEmpty(refNo) ? null : refNo,
             p_payload = string.IsNullOrEmpty(payload) ? null : payload,
-            p_requester = requester,
+            p_requester = ResolveActor(requester),
         }), "request_approval");
 
     public Task DecideApprovalAsync(string approvalNo, string decision, string approver)
@@ -355,7 +382,7 @@ public class ErpDbService
             {
                 p_approval_no = approvalNo,
                 p_decision = decision,
-                p_approver = approver,
+                p_approver = ResolveActor(approver),
             }), "decide_approval");
 
     /// <summary>Approval-gated stock override (ORA-20010 without an APPROVED token).</summary>
@@ -368,7 +395,7 @@ public class ErpDbService
             p_item_code = itemCode,
             p_qty_delta = quantityDelta,
             p_approval_no = approvalNo,
-            p_user = user,
+            p_user = ResolveActor(user),
         }), "adjust_stock");
 
     // ---------------------------------------------------------- automation reads
@@ -512,8 +539,10 @@ public class ErpDbService
             ? string.Empty : "WHERE REF_NO = :RefNo ";
         var sql = $@"
             SELECT * FROM (
-                SELECT ID, ERROR_CODE, REF_NO, TITLE, CONTEXT_JSON, DIAGNOSIS,
-                       STATUS, CREATED_BY, CREATED_AT
+                SELECT ID AS Id, ERROR_CODE AS ErrorCode, REF_NO AS RefNo,
+                       TITLE AS Title, CONTEXT_JSON AS ContextJson,
+                       DIAGNOSIS AS Diagnosis, STATUS AS Status,
+                       CREATED_BY AS CreatedBy, CREATED_AT AS CreatedAt
                   FROM SUPPORT_INCIDENT
                   {filter}
                  ORDER BY ID DESC
@@ -552,7 +581,11 @@ public class ErpDbService
         const string sql = @"
             INSERT INTO CHANGE_REQUEST (CR_NO, TITLE, REQ_TYPE, REF_NO, ROOT_CAUSE, FIX_ACTION, STATUS, REQUESTER)
             VALUES (:ChangeRequestNo, :Title, :RequestType, :ReferenceNo, :RootCause, :FixAction, 'OPEN', :Requester)";
-        var affected = await conn.ExecuteAsync(sql, req);
+        var affected = await conn.ExecuteAsync(sql, new
+        {
+            req.ChangeRequestNo, req.Title, req.RequestType, req.ReferenceNo,
+            req.RootCause, req.FixAction, Requester = CurrentActor(req.Requester)
+        });
         if (affected == 0)
         {
             throw new InvalidOperationException($"Change request {req.ChangeRequestNo} was not created.");
@@ -610,16 +643,206 @@ public class ErpDbService
         }
     }
 
+    /// <summary>Basic Oracle connectivity probe used by liveness/readiness.</summary>
     public async Task<DbHealthDto> ProbeAsync()
     {
         using var conn = CreateConnection();
         var banner = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT banner FROM v$version WHERE ROWNUM = 1");
-        // Oracle NUMBER surfaces as Decimal through the provider, hence the cast.
         var tables = await conn.ExecuteScalarAsync<decimal>("SELECT COUNT(*) FROM user_tables");
         var pkg = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT status FROM user_objects WHERE object_name = 'ERP_OPERATIONS' AND object_type = 'PACKAGE BODY'");
         return new DbHealthDto(banner, (int)tables, pkg);
     }
+
+    /// <summary>
+    /// Append an immutable application audit event. Audit failures are logged but
+    /// are intentionally not allowed to change the business transaction result.
+    /// </summary>
+    public async Task WriteAuditEventAsync(
+        string eventType, string? entityType, string? entityKey, string actor,
+        string? detailsJson, string? correlationId)
+    {
+        try
+        {
+            using var conn = CreateConnection();
+            await conn.ExecuteAsync(@"
+                INSERT INTO APP_AUDIT_EVENT
+                    (EVENT_TYPE, ENTITY_TYPE, ENTITY_KEY, ACTOR, DETAILS_JSON, CORRELATION_ID)
+                VALUES (:EventType, :EntityType, :EntityKey, :Actor, :DetailsJson, :CorrelationId)",
+                new
+                {
+                    EventType = Limit(eventType, 40),
+                    EntityType = Limit(entityType, 40),
+                    EntityKey = Limit(entityKey, 80),
+                    Actor = Limit(string.IsNullOrWhiteSpace(actor) ? "system" : actor, 50),
+                    DetailsJson = Limit(detailsJson, 4000),
+                    CorrelationId = Limit(correlationId, 60),
+                });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not append APP_AUDIT_EVENT {EventType}", eventType);
+        }
+    }
+
+    public async Task UpdateLastLoginAsync(int userId)
+    {
+        using var conn = CreateConnection();
+        await conn.ExecuteAsync(
+            "UPDATE APP_USER SET LAST_LOGIN_AT = SYSDATE WHERE ID = :Id", new { Id = userId });
+    }
+
+    public async Task<AuthenticatedUser?> AuthenticateUserAsync(string username, string password)
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password)) return null;
+        using var conn = CreateConnection();
+        const string sql = @"
+            SELECT u.ID, u.USERNAME, u.FULLNAME, u.DEPT AS Department,
+                   u.PASSWORD_HASH AS PasswordHash, u.PASSWORD_SALT AS PasswordSalt,
+                   u.PASSWORD_ITERATIONS AS Iterations,
+                   CAST(CASE WHEN u.IS_ACTIVE = 1 THEN '1' ELSE '0' END AS VARCHAR2(1)) AS IsActive,
+                   LISTAGG(r.NAME, ',') WITHIN GROUP (ORDER BY r.NAME) AS Roles
+              FROM APP_USER u
+              LEFT JOIN USER_ROLE ur ON ur.USER_ID = u.ID
+              LEFT JOIN ERP_ROLE r ON r.ID = ur.ROLE_ID
+             WHERE UPPER(u.USERNAME) = UPPER(:Username)
+             GROUP BY u.ID, u.USERNAME, u.FULLNAME, u.DEPT, u.PASSWORD_HASH,
+                      u.PASSWORD_SALT, u.PASSWORD_ITERATIONS, u.IS_ACTIVE";
+        var row = await conn.QueryFirstOrDefaultAsync<AuthUserRow>(sql,
+            new { Username = username.Trim() });
+        if (row is null || row.IsActive != "1")
+        {
+            return null;
+        }
+
+        var isPasswordValid = PasswordHashService.Verify(password, row.PasswordHash, row.PasswordSalt,
+            row.Iterations.HasValue ? (int)row.Iterations.Value : null);
+
+        if (!isPasswordValid)
+        {
+            return null;
+        }
+
+        var roles = (row.Roles ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(r => r.Length > 0)
+            .Select(r => r.ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (roles.Contains("ERP_ADMIN") && !roles.Contains("ADMIN")) roles.Add("ADMIN");
+        if (roles.Contains("ADMIN") && !roles.Contains("ERP_ADMIN")) roles.Add("ERP_ADMIN");
+        if ((roles.Contains("PRODUCTION_OPERATOR") || roles.Contains("PRODUCTION_PLANNER")) && !roles.Contains("PLANNER")) roles.Add("PLANNER");
+        if (roles.Contains("PLANNER") && !roles.Contains("PRODUCTION_OPERATOR")) roles.Add("PRODUCTION_OPERATOR");
+        if (roles.Contains("WAREHOUSE_OPERATOR") && !roles.Contains("WAREHOUSE")) roles.Add("WAREHOUSE");
+        if (roles.Contains("WAREHOUSE") && !roles.Contains("WAREHOUSE_OPERATOR")) roles.Add("WAREHOUSE_OPERATOR");
+        if ((roles.Contains("ERP_SUPPORT") || roles.Contains("ERP_SUPPORT_SPECIALIST")) && !roles.Contains("SUPPORT")) roles.Add("SUPPORT");
+        if (roles.Contains("SUPPORT") && !roles.Contains("ERP_SUPPORT")) roles.Add("ERP_SUPPORT");
+        if (roles.Contains("VIEWER") && !roles.Contains("AUDITOR")) roles.Add("AUDITOR");
+        if (roles.Contains("AUDITOR") && !roles.Contains("VIEWER")) roles.Add("VIEWER");
+
+        return new AuthenticatedUser((int)row.Id, row.Username, row.FullName, row.Department, roles.ToArray());
+    }
+
+    public async Task<IReadOnlyList<UserSummaryDto>> GetUsersAsync()
+    {
+        using var conn = CreateConnection();
+        const string sql = @"
+            SELECT u.ID, u.USERNAME, u.FULLNAME, u.DEPT AS Department,
+                   u.IS_ACTIVE AS IsActive,
+                   LISTAGG(r.NAME, ',') WITHIN GROUP (ORDER BY r.NAME) AS RolesStr
+              FROM APP_USER u
+              LEFT JOIN USER_ROLE ur ON ur.USER_ID = u.ID
+              LEFT JOIN ERP_ROLE r ON r.ID = ur.ROLE_ID
+             GROUP BY u.ID, u.USERNAME, u.FULLNAME, u.DEPT, u.IS_ACTIVE
+             ORDER BY u.ID";
+        var rows = await conn.QueryAsync(sql);
+        var result = new List<UserSummaryDto>();
+        foreach (var row in rows)
+        {
+            string rolesStr = (string)(row.ROLESSTR ?? string.Empty);
+            var roles = rolesStr.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            result.Add(new UserSummaryDto(
+                Convert.ToInt32(row.ID),
+                (string)row.USERNAME,
+                (string?)row.FULLNAME,
+                (string?)row.DEPARTMENT,
+                Convert.ToInt32(row.ISACTIVE) == 1,
+                roles
+            ));
+        }
+        return result;
+    }
+
+    public async Task<int> CreateUserAsync(CreateUserRequest request)
+    {
+        using var conn = CreateConnection();
+        var hash = PasswordHashService.Hash(request.Password);
+        const string insertSql = @"
+            INSERT INTO APP_USER (USERNAME, FULLNAME, DEPT, PASSWORD, PASSWORD_HASH, PASSWORD_ITERATIONS, IS_ACTIVE)
+            VALUES (:Username, :FullName, :Department, 'HASHED', :PasswordHash, :Iterations, 1)";
+        await conn.ExecuteAsync(insertSql, new
+        {
+            Username = request.Username.Trim().ToLowerInvariant(),
+            FullName = request.FullName,
+            Department = request.Department,
+            PasswordHash = hash,
+            Iterations = PasswordHashService.DefaultIterations
+        });
+
+        var newId = await conn.ExecuteScalarAsync<int>(
+            "SELECT ID FROM APP_USER WHERE LOWER(USERNAME) = LOWER(:Username)",
+            new { Username = request.Username.Trim() });
+
+        foreach (var role in request.Roles)
+        {
+            const string roleSql = @"
+                INSERT INTO USER_ROLE (USER_ID, ROLE_ID)
+                SELECT :UserId, r.ID FROM ERP_ROLE r WHERE UPPER(r.NAME) = UPPER(:RoleName)";
+            await conn.ExecuteAsync(roleSql, new { UserId = newId, RoleName = role });
+        }
+        return newId;
+    }
+
+    public async Task<HealthDetailsResponse> GetHealthDetailsAsync()
+    {
+        var probe = await ProbeAsync();
+        using var conn = CreateConnection();
+        var statuses = await conn.QueryAsync<PackageStatusRow>(
+            "SELECT OBJECT_NAME AS ObjectName, STATUS AS Status FROM USER_OBJECTS " +
+            "WHERE OBJECT_TYPE = 'PACKAGE BODY' AND OBJECT_NAME IN " +
+            "('ERP_OPERATIONS','ERP_AUTOMATION','ERP_TRACEABILITY')");
+        var map = statuses.ToDictionary(x => x.ObjectName, x => x.Status, StringComparer.OrdinalIgnoreCase);
+        string? version = null;
+        try
+        {
+            version = await conn.QueryFirstOrDefaultAsync<string>(
+                "SELECT ERP_TRACEABILITY.package_version FROM dual");
+        }
+        catch (OracleException ex)
+        {
+            _logger.LogWarning(ex, "ERP_TRACEABILITY version probe failed");
+        }
+        var ops = map.GetValueOrDefault("ERP_OPERATIONS");
+        var automation = map.GetValueOrDefault("ERP_AUTOMATION");
+        var trace = map.GetValueOrDefault("ERP_TRACEABILITY");
+        var ready = ops == "VALID" && automation == "VALID" && trace == "VALID" && probe.TableCount >= 31;
+        return new HealthDetailsResponse(
+            ready,
+            "UP", probe.Banner, probe.TableCount, ops, automation, trace, version,
+            DateTime.UtcNow,
+            ready ? null : "DB_SCHEMA_NOT_READY");
+    }
+
+    private static string? Limit(string? value, int length) =>
+        string.IsNullOrEmpty(value) ? null : value.Length <= length ? value : value[..length];
+
+    private sealed record AuthUserRow(decimal Id, string Username, string? FullName, string? Department,
+        string? PasswordHash, string? PasswordSalt, decimal? Iterations, string? IsActive, string? Roles);
+
+    private sealed record PackageStatusRow(string ObjectName, string Status);
 }
 

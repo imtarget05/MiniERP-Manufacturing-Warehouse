@@ -34,12 +34,30 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         TestStockFixture.Reset(Client());
     }
 
-    private HttpClient Client() => _factory.CreateClient();
+    private HttpClient RawClient() => _factory.CreateClient();
+
+    private HttpClient Client()
+    {
+        var client = RawClient();
+        var login = client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest("admin", "Admin@123")).GetAwaiter().GetResult();
+        if (!login.IsSuccessStatusCode)
+        {
+            throw new Xunit.Sdk.XunitException(
+                "Demo admin login failed. Run scripts/run-sql.sh after the Phase 5 seed: " +
+                $"{login.StatusCode} {login.Content.ReadAsStringAsync().GetAwaiter().GetResult()}");
+        }
+        var payload = login.Content.ReadFromJsonAsync<LoginResponse>(Web).GetAwaiter().GetResult()
+            ?? throw new Xunit.Sdk.XunitException("Login response was empty.");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", payload.AccessToken);
+        return client;
+    }
 
     /// <summary>Fails fast with an actionable message when Oracle is not up.</summary>
     private void EnsureDatabaseConfigured()
     {
-        var res = Client().GetAsync("/api/health").GetAwaiter().GetResult();
+        var res = RawClient().GetAsync("/api/health").GetAwaiter().GetResult();
         if (res.StatusCode == HttpStatusCode.ServiceUnavailable)
         {
             var body = res.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -196,6 +214,57 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         var runner = Assert.Single(stock!, s => s.ItemCode == "FG_RUNNER_PRO_42");
         Assert.True(runner.Quantity < 1_000m,
             $"a rolled-back completion must not create finished goods (found {runner.Quantity})");
+    }
+
+    [Fact]
+    public async Task Phase1_AcceptanceCriteria_FullWorkflow_Receipt100_Produce30_Consume30_BalanceVerified()
+    {
+        var client = Client();
+        var tag = "AC_" + Guid.NewGuid().ToString("N")[..8];
+        var rmCode = "MAT_RUBBER_01";
+        var fgCode = "FG_RUNNER_PRO_42";
+
+        // Step 1: Query initial raw material stock in WH_RAW
+        var stockRes = await client.GetAsync("/api/stock/WH_RAW");
+        stockRes.EnsureSuccessStatusCode();
+        var stockList = await stockRes.Content.ReadFromJsonAsync<List<StockItemDto>>(Web);
+        var initialRm = stockList?.FirstOrDefault(s => s.ItemCode == rmCode)?.Quantity ?? 0m;
+
+        // Step 2: Receive 100 units of raw material
+        var receiptReq = new StockInRequest("WH_RAW", rmCode, 100m, "RECV_" + tag);
+        var recvRes = await client.PostAsJsonAsync("/api/stock/in", receiptReq, Web);
+        recvRes.EnsureSuccessStatusCode();
+
+        // Step 3: Verify inventory increased by exactly 100
+        var afterRecvRes = await client.GetAsync("/api/stock/WH_RAW");
+        var afterRecvStock = await afterRecvRes.Content.ReadFromJsonAsync<List<StockItemDto>>(Web);
+        var rmAfterRecv = afterRecvStock!.First(s => s.ItemCode == rmCode).Quantity;
+        Assert.Equal(initialRm + 100m, rmAfterRecv);
+
+        // Step 4: Create Production Order for 30 pairs (BOM consumes 1 unit of rubber per pair)
+        var poNo = "PO_" + tag;
+        var createPo = new CreateProductionOrderRequest(poNo, fgCode, 30m, "WH_RAW", "planner01");
+        var poRes = await client.PostAsJsonAsync("/api/manufacturing/production-order", createPo, Web);
+        poRes.EnsureSuccessStatusCode();
+
+        // Step 5: Complete the production order (consumes 30 units of raw material, produces 30 FG)
+        var completeRes = await client.PostAsync(
+            $"/api/manufacturing/production-order/{poNo}/complete?user=planner01", content: null);
+        completeRes.EnsureSuccessStatusCode();
+
+        // Step 6: Verify raw material inventory decreased by exactly 30 units (70 delta from 100)
+        var finalStockRes = await client.GetAsync("/api/stock/WH_RAW");
+        var finalStock = await finalStockRes.Content.ReadFromJsonAsync<List<StockItemDto>>(Web);
+        var finalRm = finalStock!.First(s => s.ItemCode == rmCode).Quantity;
+        Assert.Equal(rmAfterRecv - 30m, finalRm);
+
+        // Step 7: Verify Production Order status is COMPLETED with correct QuantityDone
+        var getPoRes = await client.GetAsync($"/api/manufacturing/production-order/{poNo}");
+        getPoRes.EnsureSuccessStatusCode();
+        var poData = await getPoRes.Content.ReadFromJsonAsync<ProductionOrderDto>(Web);
+        Assert.NotNull(poData);
+        Assert.Equal("COMPLETED", poData!.Status);
+        Assert.Equal(30m, poData.DoneQuantity);
     }
 }
 

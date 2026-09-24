@@ -18,6 +18,7 @@ RUN_ID="$(date +%H%M%S)"
 PASS=0; FAIL=0; FAILED_CHECKS=""
 VERBOSE="${VERBOSE:-0}"
 RESP_CODE="000"; RESP_BODY=""
+AUTH_TOKEN="${API_TOKEN:-}"
 
 if [ -t 1 ]; then
   C_G='\033[32m'; C_R='\033[31m'; C_B='\033[36m'; C_Y='\033[33m'; C_0='\033[0m'
@@ -32,11 +33,16 @@ request() {
   tmp="$(mktemp)"
   local args=(-s -o "$tmp" -w '%{http_code}' -X "$method" "$BASE_URL$path"
               -H 'Content-Type: application/json' --max-time 90)
+  [ -n "$AUTH_TOKEN" ] && args+=(-H "Authorization: Bearer $AUTH_TOKEN")
   [ -n "$body" ] && args+=(-d "$body")
   RESP_CODE="$(curl "${args[@]}" 2>/dev/null || echo 000)"
   RESP_BODY="$(cat "$tmp")"; rm -f "$tmp"
   if [ "$VERBOSE" = "1" ]; then
-    say "  ${C_Y}$method $path -> $RESP_CODE  ${RESP_BODY:0:300}${C_0}"
+    if [ "$path" = "/api/auth/login" ]; then
+      say "  ${C_Y}$method $path -> $RESP_CODE  [credentials redacted]${C_0}"
+    else
+      say "  ${C_Y}$method $path -> $RESP_CODE  ${RESP_BODY:0:300}${C_0}"
+    fi
   fi
 }
 
@@ -141,7 +147,20 @@ print(str(d.get("banner","")) + "|" + str(d.get("packageStatus","")) + "|" + str
 say "  ${C_B}database      : ${DB%%|*}${C_0}"
 PKG="$(printf '%s' "$DB" | cut -d'|' -f2)"; TBL="$(printf '%s' "$DB" | cut -d'|' -f3)"
 check_eq "PL/SQL package ERP_OPERATIONS is VALID" "VALID" "$PKG"
-check_eq "schema object count (20 tables)" "20" "$TBL"
+check_eq "schema object count (31 tables)" "31" "$TBL"
+
+title "STEP 0A  Readiness & authentication"
+request GET /api/health/ready
+check "GET /api/health/ready -> READY" 200 status READY
+request POST /api/auth/login '{"username":"admin","password":"Admin@123"}'
+check "POST /api/auth/login -> token" 200 accessToken
+AUTH_TOKEN="$(jget accessToken)"
+if [ -z "$AUTH_TOKEN" ]; then
+  say "${C_R}Login did not return an access token; mutation checks cannot continue.${C_0}"
+  exit 1
+fi
+request GET /api/auth/me
+check "GET /api/auth/me with token" 200 username admin
 
 # ------------------------------------------------- 1. warehouse & stock reads
 title "STEP 1  Warehouse & inventory queries"
@@ -191,6 +210,7 @@ request POST /api/stock/in "{\"warehouseCode\":\"WH_RAW\",\"itemCode\":\"ITEM_NO
 check "unknown item -> HTTP 404"               404 businessCode  ERR_NOT_FOUND
 
 request POST /api/stock/in "{\"warehouseCode\":\"WH_RAW\",\"itemCode\":\"MAT_BOX_01\",\"quantity\":0,\"referenceNo\":\"SMOKE_400_$RUN_ID\"}"
+check "quantity <= 0 -> HTTP 400"              400 businessCode  ERR_INVALID_QTY
 
 # ---------------------------------------------------------- 3. manufacturing
 title "STEP 3  Production order lifecycle through the API"
@@ -218,7 +238,7 @@ PO_BIG="SMOKE_PO_BIG_$RUN_ID"
 request POST /api/manufacturing/production-order "{\"productionOrderNo\":\"$PO_BIG\",\"finishedGoodCode\":\"FG_RUNNER_PRO_42\",\"plannedQuantity\":$OVER_QTY,\"warehouseCode\":\"WH_RAW\",\"user\":\"planner01\"}"
 check "over-planned PO accepted (materials are not reserved)" 200 success true
 
-request POST "/api/manufacturing/production-order/$PO_BIG/complete?user=workshop_lead"
+request POST "/api/manufacturing/production-order/$PO_BIG/complete"
 check "shortage -> HTTP 409"                    409 businessCode  ERR_MATERIAL_SHORTAGE
 check "shortage -> ORA-20007"                   409 errorCode     ORA-20007
 check "shortage -> failing procedure reported"  409 procedureName complete_production_order
@@ -242,7 +262,7 @@ check "POST purchase-order -> registered as CREATED" 200 status CREATED
 
 request GET /api/stock/WH_RAW
 RUB_BEFORE="$(jitem itemCode MAT_RUBBER_01 quantity)"
-request POST "/api/procurement/purchase-order/SMOKE_PUR_$RUN_ID/receive?user=warehouse01"
+request POST "/api/procurement/purchase-order/SMOKE_PUR_$RUN_ID/receive"
 check "POST purchase-order/receive -> RECEIVED" 200 status RECEIVED
 request GET /api/stock/WH_RAW
 check_eq "receive_purchase_order added +100 to WH_RAW" "$(num "$RUB_BEFORE + 100")" "$(jitem itemCode MAT_RUBBER_01 quantity)"
@@ -328,5 +348,3 @@ if [ "$FAIL" -gt 0 ]; then
 fi
 say "\n${C_G}RESULT: API SMOKE TEST - ALL $PASS CHECKS PASSED${C_0}"
 exit 0
-
-check "quantity <= 0 -> HTTP 400"              400 businessCode  ERR_INVALID_QTY

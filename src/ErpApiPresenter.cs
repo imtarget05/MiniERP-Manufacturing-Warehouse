@@ -17,6 +17,8 @@ public static class ErpApiPresenter
         "ERR_NOT_FOUND" => StatusCodes.Status404NotFound,
         "ERR_INVALID_QTY" or "ERR_INVALID_INPUT" => StatusCodes.Status400BadRequest,
         "ERR_APPROVAL_REQUIRED" => StatusCodes.Status403Forbidden,
+        "ERR_IDEMPOTENCY_CONFLICT" => StatusCodes.Status409Conflict,
+        "ERR_DUPLICATE_REPLAY" => StatusCodes.Status200OK,
         "ERR_INTERNAL" or "ERR_DATABASE" => StatusCodes.Status500InternalServerError,
         _ => StatusCodes.Status409Conflict,
     };

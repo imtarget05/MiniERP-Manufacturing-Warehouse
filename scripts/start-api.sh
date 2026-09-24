@@ -51,7 +51,10 @@ DLL="bin/Release/net8.0/MiniERP.Api.dll"
 [ -f "$DLL" ] || die "build did not produce $DLL"
 
 export ASPNETCORE_URLS="http://localhost:$API_PORT"
-export ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Production}"
+export ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Development}"
+if [ "$ASPNETCORE_ENVIRONMENT" != "Development" ] && [ -z "${JWT_SIGNING_KEY:-}" ]; then
+  die "JWT_SIGNING_KEY is required when ASPNETCORE_ENVIRONMENT=$ASPNETCORE_ENVIRONMENT"
+fi
 
 if [ "${RUN_MODE:-fg}" = "bg" ]; then
   nohup dotnet "$DLL" > "$LOG_FILE" 2>&1 &

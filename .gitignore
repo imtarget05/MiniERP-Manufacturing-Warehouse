@@ -27,8 +27,15 @@ node_modules/
 !.env.example
 *credentials*.json
 
-# === Oracle data (khong bao gio commit) ===
+# ===============================================================
+
+# === Oracle data / generated DR artifacts (khong commit) ===
 **/oradata/
+backups/
+artifacts/factory-upgrade/final/evidence/*.dmp
+artifacts/factory-upgrade/final/evidence/dr/*.dmp
+artifacts/factory-upgrade/final/evidence/dr/*.log
+artifacts/factory-upgrade/final/evidence/*.log
 
 # === test evidence: keep swagger.json, ignore raw run logs ===
 artifacts/*.log

@@ -1,0 +1,1 @@
+{"success":true,"message":"Production order MO-E2E23054832021 created.","poNo":"MO-E2E23054832021","order":{"productionOrderNo":"MO-E2E23054832021","finishedGoodCode":"FG_RUNNER_PRO_42","plannedQuantity":1,"doneQuantity":0,"status":"RELEASED","warehouseCode":"WH_RAW","createdAt":"2026-09-24T16:05:56","completedAt":null}}

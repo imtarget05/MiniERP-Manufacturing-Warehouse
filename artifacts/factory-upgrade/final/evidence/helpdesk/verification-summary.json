@@ -1,0 +1,43 @@
+{
+  "online": {
+    "externalRef": "ERP-ONLINE-1790253836",
+    "status": "SENT",
+    "sent": true,
+    "duplicate": false,
+    "attempts": 1,
+    "errorCode": null,
+    "message": "Helpdesk accepted the incident."
+  },
+  "replay": {
+    "externalRef": "ERP-ONLINE-1790253836",
+    "status": "SENT",
+    "sent": true,
+    "duplicate": true,
+    "attempts": 1,
+    "errorCode": null,
+    "message": "Already delivered."
+  },
+  "offline": {
+    "success": true,
+    "incidentId": 2,
+    "errorCode": "ERR_MATERIAL_SHORTAGE",
+    "referenceNo": "PO-HD-OFFLINE",
+    "status": "OPEN",
+    "diagnosis": "Likely material shortage: check REPLENISH_ALERT rows for this reference, verify STOCK vs BOM requirement, then receive the pending purchase order or free competing reservations (release_reservations).",
+    "contextJson": "{\"refNo\":\"PO-HD-OFFLINE\",\"errorCode\":\"ERR_MATERIAL_SHORTAGE\",\"errorLogRows\":0,\"poStatus\":null,\"openAlerts\":0,\"capturedAt\":\"2026-09-24 12:44:47\",\"capturedBy\":\"admin\",\"errorCodes\":\"[]\"}",
+    "helpdeskDelivery": {
+      "externalRef": "ERP-INC-000002",
+      "status": "FAILED",
+      "sent": false,
+      "duplicate": false,
+      "attempts": 2,
+      "errorCode": "DELIVERY_UNAVAILABLE",
+      "message": "Helpdesk unavailable; ERP result is unchanged."
+    }
+  },
+  "receiver_request_count": 1,
+  "offline_local_incident_status": "OPEN",
+  "offline_delivery_status": "FAILED",
+  "offline_delivery_error": "DELIVERY_UNAVAILABLE",
+  "secret_fields_persisted": false
+}

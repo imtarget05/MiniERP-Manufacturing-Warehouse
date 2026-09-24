@@ -1,0 +1,13 @@
+baseline captured: 2026-09-24 (Asia/Ho_Chi_Minh)
+branch: main
+commit: 900c228ba396884ee7a0097d80efd865b1aa817c (origin/main)
+git status --short: (clean - no output, exit 0)
+git log --oneline -3:
+  900c228 ci(sonar): restrict scan inclusions strictly to src/ C# code, excluding SQL and artifacts
+  bb13d77 ci: trigger fresh verification for CI and SonarCloud
+  968c9db ci(sonar): embed SonarCloud project token for automated CI analysis
+dotnet: 8.0.425 ($HOME/.dotnet/dotnet)
+unit tests (Category!=Integration): 37 passed, 0 failed (verified 2026-09-24 pre-change run)
+integration tests: NOT RUN locally - require Oracle container (docker daemon unavailable in this environment)
+health: local API on :5000 returns DOWN/O serta ORA-50201 (no Oracle connectivity) - expected without DB
+note: docker daemon unavailable => DB-backed verification deferred to CI / environment with Oracle

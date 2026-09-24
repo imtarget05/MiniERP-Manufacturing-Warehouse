@@ -1,0 +1,83 @@
+-- ============================================================================
+-- PROJECT: 04-MiniERP-Manufacturing-Warehouse
+-- FILE:    sql/11_rbac_seed.sql
+-- PURPOSE: Phase 2 RBAC roles & user seeds for production-style auth
+-- ============================================================================
+
+-- 1. Insert canonical roles
+MERGE INTO ERP_ROLE r
+USING (
+    SELECT 'ADMIN' AS NAME FROM DUAL UNION ALL
+    SELECT 'PLANNER' AS NAME FROM DUAL UNION ALL
+    SELECT 'WAREHOUSE' AS NAME FROM DUAL UNION ALL
+    SELECT 'PROCUREMENT' AS NAME FROM DUAL UNION ALL
+    SELECT 'SUPPORT' AS NAME FROM DUAL UNION ALL
+    SELECT 'AUDITOR' AS NAME FROM DUAL
+) src ON (r.NAME = src.NAME)
+WHEN NOT MATCHED THEN
+    INSERT (NAME) VALUES (src.NAME);
+
+COMMIT;
+
+-- 2. Update existing users with canonical password hashes
+UPDATE APP_USER
+   SET PASSWORD_HASH = 'pbkdf2$210000$+IkqdaiCQe7Rrtz3ANnK3Q==$YqFYAAtmnIeKbvmEplofOCatgz2sdsNf4rvcOkp1hVQ='
+ WHERE USERNAME = 'admin';
+
+UPDATE APP_USER
+   SET PASSWORD_HASH = 'pbkdf2$210000$6ueIMCvwzrOz7O1b/5dknQ==$mAKaH0ZtPj2CdwKgNIc9wsfGDaODJh42G4kQ0P6DsWU='
+ WHERE USERNAME = 'planner01';
+
+UPDATE APP_USER
+   SET PASSWORD_HASH = 'pbkdf2$210000$ndgEAurF27OchO3DwWmuDQ==$z4sgk4650iW8vCF1Uap12L5ohbBytqKrxReXSzUrT6o='
+ WHERE USERNAME = 'warehouse01';
+
+-- 3. Insert new canonical seed users if not exist
+MERGE INTO APP_USER u
+USING (
+    SELECT 'procurement01' AS USERNAME, 'Nguyen Van C - Thu Mua' AS FULLNAME, 'Procurement' AS DEPT,
+           'pbkdf2$210000$srxfrMMQWDI8n5X89C9Njg==$/ABmohHplsxtpq9mIREYNQd9KRrMGqogGWv0OMm8JbU=' AS PASSWORD_HASH
+      FROM DUAL
+) src ON (u.USERNAME = src.USERNAME)
+WHEN NOT MATCHED THEN
+    INSERT (USERNAME, FULLNAME, DEPT, PASSWORD, PASSWORD_HASH, PASSWORD_ITERATIONS, IS_ACTIVE)
+    VALUES (src.USERNAME, src.FULLNAME, src.DEPT, 'HASHED', src.PASSWORD_HASH, 210000, 1);
+
+MERGE INTO APP_USER u
+USING (
+    SELECT 'support01' AS USERNAME, 'Le Thi D - IT Helpdesk' AS FULLNAME, 'Support' AS DEPT,
+           'pbkdf2$210000$yrAYPr+uU0oIDpGlcyeqGg==$kX3nzAL3BSCS75iesyoKQiuJ2aGyQRMRllT1WLOTTCQ=' AS PASSWORD_HASH
+      FROM DUAL
+) src ON (u.USERNAME = src.USERNAME)
+WHEN NOT MATCHED THEN
+    INSERT (USERNAME, FULLNAME, DEPT, PASSWORD, PASSWORD_HASH, PASSWORD_ITERATIONS, IS_ACTIVE)
+    VALUES (src.USERNAME, src.FULLNAME, src.DEPT, 'HASHED', src.PASSWORD_HASH, 210000, 1);
+
+MERGE INTO APP_USER u
+USING (
+    SELECT 'auditor01' AS USERNAME, 'Pham Van E - Kiem Toan' AS FULLNAME, 'Audit' AS DEPT,
+           'pbkdf2$210000$AYJZ2PMPVqwIhzNWJCwh0w==$Z6GcbUfqhINNU7zuuONTYQfEivyJF02mMHow6kWtiT8=' AS PASSWORD_HASH
+      FROM DUAL
+) src ON (u.USERNAME = src.USERNAME)
+WHEN NOT MATCHED THEN
+    INSERT (USERNAME, FULLNAME, DEPT, PASSWORD, PASSWORD_HASH, PASSWORD_ITERATIONS, IS_ACTIVE)
+    VALUES (src.USERNAME, src.FULLNAME, src.DEPT, 'HASHED', src.PASSWORD_HASH, 210000, 1);
+
+COMMIT;
+
+-- 4. Assign Canonical Roles
+MERGE INTO USER_ROLE ur
+USING (
+    SELECT u.ID AS USER_ID, r.ID AS ROLE_ID
+      FROM APP_USER u, ERP_ROLE r
+     WHERE (u.USERNAME = 'admin' AND r.NAME IN ('ADMIN', 'ERP_ADMIN'))
+        OR (u.USERNAME = 'planner01' AND r.NAME IN ('PLANNER', 'PRODUCTION_OPERATOR'))
+        OR (u.USERNAME = 'warehouse01' AND r.NAME IN ('WAREHOUSE', 'WAREHOUSE_OPERATOR'))
+        OR (u.USERNAME = 'procurement01' AND r.NAME IN ('PROCUREMENT', 'WAREHOUSE_OPERATOR'))
+        OR (u.USERNAME = 'support01' AND r.NAME IN ('SUPPORT', 'ERP_SUPPORT'))
+        OR (u.USERNAME = 'auditor01' AND r.NAME IN ('AUDITOR', 'VIEWER'))
+) src ON (ur.USER_ID = src.USER_ID AND ur.ROLE_ID = src.ROLE_ID)
+WHEN NOT MATCHED THEN
+    INSERT (USER_ID, ROLE_ID) VALUES (src.USER_ID, src.ROLE_ID);
+
+COMMIT;

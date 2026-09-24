@@ -1,0 +1,1 @@
+{"direction":"FORWARD","trace":{"kind":"LOT","key":"RM-ACTIVE-E2E23054832021","itemCode":"MAT_RUBBER_01","qty":null,"children":[{"kind":"PRODUCTION_ORDER","key":"MO-E2E23054832021","itemCode":null,"qty":1,"children":[{"kind":"LOT","key":"FG-E2E23054832021","itemCode":"FG_RUNNER_PRO_42","qty":1,"children":[]}]}]}}
