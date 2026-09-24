@@ -6,19 +6,22 @@ using MiniERP.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 var jwtOptions = JwtOptions.FromConfiguration(builder.Configuration, builder.Environment);
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").GetChildren()
+var rawOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").GetChildren()
     .Select(x => x.Value)
     .Where(x => !string.IsNullOrWhiteSpace(x))
     .Select(x => x!.Trim())
-    .ToArray();
-if (allowedOrigins.Length == 0)
-{
-    var envOrigins = builder.Configuration["CORS_ALLOWED_ORIGINS"];
-    if (!string.IsNullOrWhiteSpace(envOrigins))
-        allowedOrigins = envOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-}
-if (allowedOrigins.Length == 0 && builder.Environment.IsDevelopment())
-    allowedOrigins = new[] { "http://localhost:5000", "http://localhost:3000" };
+    .ToList();
+// CORS_ALLOWED_ORIGINS (docker compose) is additive, not a fallback: the UI
+// origin shipped in docker-compose.yml must be honoured even when
+// appsettings.json already lists origins. Previously the env var was only read
+// when the file list was empty, so http://localhost:8080 was never allowed and
+// the dashboard silently dropped into MOCK (API offline) mode in the browser.
+var envOrigins = builder.Configuration["CORS_ALLOWED_ORIGINS"];
+if (!string.IsNullOrWhiteSpace(envOrigins))
+    rawOrigins.AddRange(envOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+if (rawOrigins.Count == 0 && builder.Environment.IsDevelopment())
+    rawOrigins.AddRange(new[] { "http://localhost:8080", "http://localhost:5000", "http://localhost:3000" });
+var allowedOrigins = rawOrigins.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
 // ---------------------------------------------------------------- services
 builder.Services.AddEndpointsApiExplorer();
