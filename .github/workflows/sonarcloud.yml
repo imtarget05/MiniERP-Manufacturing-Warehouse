@@ -69,7 +69,8 @@ jobs:
             /o:"imtarget05" \
             /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
             /d:sonar.host.url="https://sonarcloud.io" \
-            /d:sonar.exclusions="**/bin/**,**/obj/**,artifacts/**,dashboard/**,sql/**,docs/**,scripts/**,data/**" \
+            /d:sonar.tests="tests" \
+            /d:sonar.exclusions="**/bin/**,**/obj/**,artifacts/**,dashboard/**,sql/**,docs/**,scripts/**,data/**,**/*.yml,**/*.yaml,**/Dockerfile,**/Dockerfile*,**/docker-compose.yml,src/Models/**" \
             /d:sonar.test.exclusions="**/bin/**,**/obj/**" \
             /d:sonar.coverage.exclusions="**/Models/**,**/Migrations/**" \
             /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml"
