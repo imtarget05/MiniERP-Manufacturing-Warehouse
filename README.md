@@ -282,10 +282,13 @@ Kịch bản đầy đủ cho buổi phỏng vấn:
 - [💾 Sao lưu, phục hồi & DR](docs/operations/backup-restore.md)
 - [🚨 Runbook ERP Support](docs/05-erp-support-runbook.md)
 - [🎯 Kịch bản demo đầy đủ](docs/demo/recruiter-demo.md)
-- [📨 Hợp đồng tích hợp Helpdesk](https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/blob/main/docs/11-minierp-integration.md)
+- [📨 Hợp đồng tích hợp Helpdesk][helpdesk-integration]
 
 > Đây là dự án portfolio mô phỏng nghiệp vụ doanh nghiệp. Tài khoản và số liệu
 > trong repository chỉ dùng cho học tập/demo, không phải cam kết SLA thương mại.
+
+[helpdesk-integration]:
+https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/blob/main/docs/11-minierp-integration.md
 
 ---
 
