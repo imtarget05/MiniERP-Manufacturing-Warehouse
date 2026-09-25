@@ -69,11 +69,9 @@ jobs:
             /o:"imtarget05" \
             /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
             /d:sonar.host.url="https://sonarcloud.io" \
-            /d:sonar.projectBaseDir="${{ github.workspace }}" \
-            /d:sonar.inclusions="src/**" \
-            /d:sonar.exclusions="**/bin/**,**/obj/**,**/*.sql,**/*.json,**/*.md,**/*.html,**/*.css,**/*.js,**/*.sh,artifacts/**,dashboard/**,sql/**,docs/**,scripts/**" \
-            /d:sonar.test.inclusions="tests/**" \
+            /d:sonar.exclusions="**/bin/**,**/obj/**" \
             /d:sonar.test.exclusions="**/bin/**,**/obj/**" \
+            /d:sonar.coverage.exclusions="**/Models/**,**/Migrations/**" \
             /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml"
 
       - name: Build Solution
