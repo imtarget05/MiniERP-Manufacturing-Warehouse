@@ -1,5 +1,25 @@
 # Project Completion Plan — MiniERP Manufacturing & Warehouse
 
+> ## ⚠️ HISTORICAL DOCUMENT — SUPERSEDED, DO NOT QUOTE AS EVIDENCE
+>
+> **Ngày:** 2026-09-24. Đây là bản plan **đã đóng** tại thời điểm đó, giữ nguyên
+> để làm audit trail. Mọi con số trong file này là **snapshot ngày 2026-09-24** và
+> **không còn đúng**:
+>
+> | Claim trong file này (2026-09-24) | Số đã đo được (2026-09-26, fresh) |
+> |---|---|
+> | `19 tests cần DB` | **55** test `Category=Integration` |
+> | `144 unit` | **247** test không cần DB |
+> | `163/163` (nếu có) | **302/302** full suite xanh |
+>
+> Nguồn số hiện tại: [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md) →
+> *Release Verification Record — v1.2 (2026-09-26)*. File plan này **không được
+> sửa số**; chỉ thêm banner này để không ai trích nó làm bằng chứng hiện hành.
+>
+> **Phạm vi banner: toàn bộ tài liệu này.** Mọi dòng bên dưới — kể cả các mục
+> checklist, sơ đồ và bảng — là nội dung ngày 2026-09-24 và **không** phải claim
+> hiện hành. Đây là plan đã đóng, không phải tài liệu đang thực thi.
+
 **Date:** 2026-09-24
 **Status baseline:** 18/18 phases 🟢 locally, remote `main` tại `cfc8070` sạch, working tree clean.
 **Mục tiêu plan này:** đưa dự án từ "xong local" sang "xong hoàn toàn": CI xanh trên remote, integration có Oracle chứng thực, release có tag, demo chạy được 5 phút.

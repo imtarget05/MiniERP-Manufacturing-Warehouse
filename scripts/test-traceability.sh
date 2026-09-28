@@ -5,13 +5,55 @@
 # PURPOSE: Real Oracle/API acceptance for receive -> barcode -> label ->
 #          put-away -> cross-warehouse move -> FEFO issue -> FG output ->
 #          backward/forward trace -> reconciliation.
-# USAGE:   bash scripts/test-traceability.sh [base_url]
+# USAGE:   MINIERP_QA_DISPOSABLE=1 DB_CONTAINER=<disposable> APP_USER=<user> \
+#            bash scripts/test-traceability.sh <base_url>
+#          ... --gate-check             print the authorised target, contact nothing
 # REQUIRES: fresh SQL load (bash scripts/run-sql.sh), running Oracle + API.
+#
+#          No default base URL. scripts/lib.sh still defaults $BASE_URL to
+#          http://localhost:5000, so the operator's value is captured BEFORE
+#          lib.sh runs - otherwise "unset" and "explicitly set to localhost:5000"
+#          are indistinguishable and the gate cannot refuse the second one.
+#          The run writes to both ends (it calls run_sql and the API), so
+#          scripts/qa-gate.sh is asked to authorise the database too.
+# EXIT:    0 = every check passed, 1 = at least one failed,
+#          78 = refused by scripts/qa-gate.sh (nothing was contacted)
 # ============================================================================
 set -uo pipefail
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+QA_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-BASE_URL="${1:-$BASE_URL}"
+# Operator-supplied only, captured BEFORE lib.sh can invent a default: after
+# sourcing it, DB_CONTAINER is always "minierp-oracle" and BASE_URL is always
+# "http://localhost:5000", so the gate would be unable to tell an explicit
+# value from an inherited one.
+BASE_URL_IN="${BASE_URL:-}"
+DB_CONTAINER_IN="${DB_CONTAINER:-}"
+APP_USER_IN="${APP_USER:-}"
+QA_DB_VOLUME_IN="${QA_DB_VOLUME:-}"
+QA_DB_PROJECT_IN="${QA_DB_PROJECT:-}"
+
+source "$QA_HERE/lib.sh"
+# shellcheck source=scripts/qa-gate.sh
+source "$QA_HERE/qa-gate.sh"
+# shellcheck source=scripts/portable-tmp.sh
+source "$QA_HERE/portable-tmp.sh"
+
+# One scratch directory per run, so every .sql file below keeps its suffix
+# without asking mktemp for a non-trailing X run (BSD/macOS resolves such a
+# template to a literal, colliding path - see scripts/portable-tmp.sh). Any
+# literal file an older broken run left behind is swept first, so a stale file
+# can never be picked up as a snapshot or block this run.
+TRACE_TMPDIR="$(portable_tmpdir trace-recon)" \
+  || die "could not create a scratch directory for this traceability run"
+portable_tmp_sweep_legacy >&2
+trap 'rm -rf "$TRACE_TMPDIR"' EXIT
+
+qa_gate_parse_args "test-traceability.sh" "$@"
+qa_gate "test-traceability.sh" "$QA_BASE_URL" 1 1 "$QA_GATE_MODE"
+
+BASE_URL="$QA_BASE_URL"
+BASE_URL_DISPLAY="$(qa_gate_sanitize "$BASE_URL")"
+
 RUN_ID="E2E$(date +%H%M%S)${RANDOM}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin@123}"
 EVIDENCE_DIR="$REPO_ROOT/artifacts/factory-upgrade/final/evidence"
@@ -32,7 +74,7 @@ MFG_NO="MO-$RUN_ID"
 mkdir -p "$EVIDENCE_DIR"
 rule
 printf '%b\n' "${C_B}Traceability E2E acceptance${C_0}  run=$RUN_ID"
-printf '%b\n' "API=$BASE_URL  evidence=$EVIDENCE_DIR"
+printf '%b\n' "API=$BASE_URL_DISPLAY  evidence=$EVIDENCE_DIR"
 rule
 
 pass() { PASS=$((PASS + 1)); printf '%b\n' "  ${C_G}[PASS]${C_0} $*"; }
@@ -97,6 +139,76 @@ TOKEN="$(json_value accessToken)"
 request GET /api/health/ready
 expect "database readiness" 200
 check_json "readiness status is READY" "d['status']=='READY'"
+
+# B-04: the reconciliation invariant at the end of this run must be scoped to
+# what this run is responsible for. ERP_TRACEABILITY moves STOCK and LOT_STOCK
+# together, so the run's own invariant is (a) the per-pair DELTA of the two
+# ledgers agrees, and (b) each lot this run created reconciles absolutely
+# against what the run received / consumed. A global "every LOT-tracked item
+# reconciles" check is not a property of this run: ERP_OPERATIONS
+# (receive_purchase_order, create_stock_in, MFG_CONSUME) never writes
+# LOT_STOCK, so a drift created by test-incident.sh / test-api.sh / the xUnit
+# suite used to decide this run's verdict (60/61 in the plan order).
+# Snapshot the run's own (warehouse, item) pairs before anything mutates them.
+RECON_SQL="SELECT 'SNAP=' || W.CODE || ':' || I.CODE || ':' ||
+  NVL((SELECT TO_CHAR(S.QTY) FROM STOCK S
+        WHERE S.WAREHOUSE_ID=W.ID AND S.ITEM_ID=I.ID), 'absent') || ':' ||
+  NVL((SELECT TO_CHAR(SUM(LS.QTY_ON_HAND)) FROM LOT_STOCK LS
+        JOIN INVENTORY_LOT L ON L.LOT_ID=LS.LOT_ID
+       WHERE LS.WAREHOUSE_ID=W.ID AND L.ITEM_ID=I.ID), '0')
+  FROM WAREHOUSE W CROSS JOIN ITEM I
+ WHERE W.CODE IN ('WH_RAW','WH_WIP','WH_FG')
+   AND I.CODE IN ('MAT_RUBBER_01','FG_RUNNER_PRO_42')
+ ORDER BY W.CODE, I.CODE;"
+RECON_PAIRS=6   # 3 warehouses (WH_RAW/WH_WIP/WH_FG) x 2 items (rubber, finished good)
+# Raw output, not a scalar: sql_eval would collapse these rows to one value and
+# the comparison would silently compare nothing.
+recon_snapshot() {
+  local out="$1" file
+  file="$(portable_tmp_path "$TRACE_TMPDIR" "recon-$RUN_ID-$RANDOM.sql")"
+  { printf '%s\n' "SET HEADING OFF FEEDBACK OFF PAGESIZE 0 LINESIZE 240" "$RECON_SQL" "EXIT;"; } > "$file"
+  if ! run_sql "$file" "$out"; then
+    fail "reconciliation snapshot could not be read (see $out)"
+  fi
+  rm -f "$file"
+}
+recon_delta() {  # recon_delta <before snapshot> <after snapshot> -> MISMATCH=<n>
+  python3 - "$1" "$2" <<'PYEOF'
+import sys
+
+def parse(text):
+    out = {}
+    for line in text.splitlines():
+        if not line.startswith("SNAP="):
+            continue
+        parts = line[len("SNAP="):].strip().split(":")
+        if len(parts) < 4:
+            continue
+        wh, item, stock, lot = parts[0], parts[1], parts[2], ":".join(parts[3:])
+        out[(wh, item)] = (0.0 if stock == "absent" else float(stock), float(lot))
+    return out
+
+before, after = parse(open(sys.argv[1]).read()), parse(open(sys.argv[2]).read())
+if not before or not after:
+    print("MISMATCH=unreadable")
+    print("MISMATCH_PAIR=empty snapshot (before=%d pairs, after=%d pairs)" % (len(before), len(after)))
+    sys.exit(0)
+bad = []
+for key in sorted(set(before) | set(after)):
+    b_stock, b_lot = before.get(key, (0.0, 0.0))
+    a_stock, a_lot = after.get(key, (0.0, 0.0))
+    d_stock, d_lot = a_stock - b_stock, a_lot - b_lot
+    if abs(d_stock - d_lot) > 0.0001:
+        bad.append("%s/%s stock_delta=%+g lot_delta=%+g" % (key[0], key[1], d_stock, d_lot))
+print("MISMATCH=" + str(len(bad)))
+for line in bad:
+    print("MISMATCH_PAIR=" + line)
+PYEOF
+}
+RECON_BEFORE_FILE="$(mktemp /tmp/trace-recon-before-XXXX)"
+recon_snapshot "$RECON_BEFORE_FILE"
+RECON_BEFORE_PAIRS="$(grep -c "^SNAP=" "$RECON_BEFORE_FILE" || true)"
+check_eq "reconciliation snapshot covers the run's scoped stock/lot pairs" "$RECON_PAIRS" "$RECON_BEFORE_PAIRS"
 
 # ------------------------------------------------- 1. purchase + receive lots
 rule; printf '%b\n' "${C_B}1. Purchase order & lot receiving${C_0}"; rule
@@ -225,15 +337,85 @@ save_response "15-finished-goods-label.json"
 
 # -------------------------------------------------------- 6. reconciliation
 rule; printf '%b\n' "${C_B}6. Accounting / lot reconciliation & audit${C_0}"; rule
-MISMATCH="$(sql_eval "SELECT 'MISMATCH=' || COUNT(*) FROM (
- SELECT S.WAREHOUSE_ID, S.ITEM_ID, S.QTY
-   FROM STOCK S JOIN ITEM I ON I.ID=S.ITEM_ID WHERE I.TRACE_MODE='LOT'
- MINUS
- SELECT LS.WAREHOUSE_ID, L.ITEM_ID, SUM(LS.QTY_ON_HAND)
-   FROM LOT_STOCK LS JOIN INVENTORY_LOT L ON L.LOT_ID=LS.LOT_ID
-  GROUP BY LS.WAREHOUSE_ID, L.ITEM_ID
-);" KEEP)"
-check_eq "aggregate stock reconciles with lot stock" "0" "$MISMATCH"
+# B-04 self-test: TRACEABILITY_RECON_FAULT injects an IN-SCOPE drift after the
+# run finished moving stock, and the reconciliation below must fail. Without it
+# the scoped check could be vacuously green. Off by default.
+#   stock_drift -> the per-pair delta check must fail (STOCK moved, LOT_STOCK did not)
+#   lot_drift   -> the per-lot absolute check must fail (LOT_STOCK corrupted)
+fault_apply() {
+  local name="$1" statement="$2"
+  local file out
+  file="$(portable_tmp_path "$TRACE_TMPDIR" "fault-$name.sql")"
+  out="$(portable_tmp_path "$TRACE_TMPDIR" "fault-$name.log")"
+  { printf '%s\n' "SET HEADING OFF FEEDBACK OFF PAGESIZE 0 LINESIZE 240" "$statement" "EXIT;"; } > "$file"
+  if run_sql "$file" "$out"; then
+    cp "$out" "$EVIDENCE_DIR/traceability-fault-$name.log"
+    printf '%b\n' "${C_R}[FAULT INJECTION] $name applied${C_0}" >&2
+  else
+    cp "$out" "$EVIDENCE_DIR/traceability-fault-$name.log"
+    fail "fault injection '$name' could not be applied (see traceability-fault-$name.log)"
+  fi
+  rm -f "$file" "$out"
+}
+case "${TRACEABILITY_RECON_FAULT:-}" in
+  stock_drift)
+    printf '%b\n' "${C_R}[FAULT INJECTION] stock_drift: adding 1 to WH_RAW/MAT_RUBBER_01 STOCK only${C_0}" >&2
+    fault_apply "stock_drift" "UPDATE STOCK S SET S.QTY = S.QTY + 1, S.UPDATED_AT = SYSDATE
+     WHERE S.ITEM_ID = (SELECT I.ID FROM ITEM I WHERE I.CODE='MAT_RUBBER_01')
+       AND S.WAREHOUSE_ID = (SELECT W.ID FROM WAREHOUSE W WHERE W.CODE='WH_RAW');
+    COMMIT;"
+    ;;
+  lot_drift)
+    printf '%b\n' "${C_R}[FAULT INJECTION] lot_drift: subtracting 1 from the run lot in LOT_STOCK${C_0}" >&2
+    # CK_LS_RSV_LE keeps QTY_ON_HAND >= QTY_RESERVED, so only a free row can drift.
+    fault_apply "lot_drift" "UPDATE LOT_STOCK LS SET LS.QTY_ON_HAND = LS.QTY_ON_HAND - 1
+     WHERE LS.LOT_ID = (SELECT L.LOT_ID FROM INVENTORY_LOT L WHERE L.LOT_CODE='$PASS_ACTIVE')
+       AND LS.WAREHOUSE_ID = (SELECT W.ID FROM WAREHOUSE W WHERE W.CODE='WH_RAW')
+       AND NVL(LS.QTY_RESERVED, 0) = 0 AND LS.QTY_ON_HAND > 0;
+    COMMIT;"
+    ;;
+  "") : ;;
+  *) fail "unknown TRACEABILITY_RECON_FAULT='$TRACEABILITY_RECON_FAULT' (expected stock_drift or lot_drift)" ;;
+esac
+RECON_AFTER_FILE="$(mktemp /tmp/trace-recon-after-XXXX)"
+recon_snapshot "$RECON_AFTER_FILE"
+RECON_AFTER_PAIRS="$(grep -c "^SNAP=" "$RECON_AFTER_FILE" || true)"
+check_eq "reconciliation snapshot is still readable after the run" "$RECON_PAIRS" "$RECON_AFTER_PAIRS"
+RECON_RESULT="$(recon_delta "$RECON_BEFORE_FILE" "$RECON_AFTER_FILE")"
+MISMATCH="$(printf '%s\n' "$RECON_RESULT" | sed -n 's/^MISMATCH=//p')"
+check_eq "run's stock and lot movements reconcile (WH_RAW/WH_WIP rubber, WH_FG finished good)" \
+  "0" "$MISMATCH"
+printf '%s\n' "$RECON_RESULT" | grep '^MISMATCH_PAIR=' | while read -r _ detail; do
+  fail "lot reconciliation drift in scope: ${detail#MISMATCH_PAIR=}"
+done
+
+# Absolute reconciliation for the lots this run created: received quantity minus
+# what the run consumed. A pre-existing drift on some other lot is not this
+# run's business, but a corruption inside this run's own lots still fails.
+LOT_SCOPE_MISMATCH=0
+for spec in "$PASS_ACTIVE:10" "$PASS_BLOCKED:5" "$PASS_EXPIRED:2"; do
+  lot_code="${spec%%:*}"; received="${spec##*:}"
+  # Consumed by the run's own production order. PRODUCTION_LOT_OUTPUT holds the
+  # FG side (QTY_PRODUCED against OUTPUT_LOT_ID), so it is not part of a raw
+  # lot's balance.
+  consumed="$(sql_eval "SELECT 'CONSUMED=' || COALESCE((SELECT SUM(C.QTY_CONSUMED)
+      FROM PRODUCTION_LOT_CONSUMPTION C JOIN INVENTORY_LOT L ON L.LOT_ID=C.INPUT_LOT_ID
+     WHERE L.LOT_CODE='$lot_code'), 0);")"
+  consumed="${consumed#CONSUMED=}"
+  case "$consumed" in
+    ''|*[!0-9.-]*) consumed=0 ;;
+  esac
+  held="$(sql_eval "SELECT 'HELD=' || COALESCE(SUM(QTY_ON_HAND),0) FROM LOT_STOCK LS
+      JOIN INVENTORY_LOT L ON L.LOT_ID=LS.LOT_ID WHERE L.LOT_CODE='$lot_code';")"
+  held="${held#HELD=}"
+  expected="$(python3 -c "print($received - $consumed)")"
+  if [ "$held" = "$expected" ]; then
+    pass "run lot $lot_code reconciles: received $received - consumed $consumed = held $held"
+  else
+    fail "run lot $lot_code does not reconcile: received $received - consumed $consumed = $expected, lot stock says $held"
+    LOT_SCOPE_MISMATCH=$((LOT_SCOPE_MISMATCH + 1))
+  fi
+done
 FG_QTY="$(sql_eval "SELECT 'FG=' || SUM(QTY_ON_HAND) FROM LOT_STOCK LS JOIN INVENTORY_LOT L ON L.LOT_ID=LS.LOT_ID JOIN WAREHOUSE W ON W.ID=LS.WAREHOUSE_ID WHERE L.LOT_CODE='$FG_LOT' AND W.CODE='WH_FG';")"
 check_eq "FG lot is stored in WH_FG" "1" "$FG_QTY"
 AUDIT_COUNT="$(sql_eval "SELECT 'AUDIT=' || COUNT(*) FROM APP_AUDIT_EVENT WHERE ACTOR='admin' AND CORRELATION_ID IS NOT NULL;")"

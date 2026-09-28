@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" font-family="sans-serif">
+<rect width="1200" height="700" fill="#f4f4f5"/>
+<rect x="0" y="0" width="1200" height="56" fill="#1f2937"/>
+<text x="20" y="36" fill="#fff" font-size="20">MiniERP — Overview (wireframe)</text>
+<text x="1050" y="36" fill="#9ca3af" font-size="14">ADMIN ▾</text>
+<rect x="20" y="76" width="270" height="110" fill="#fff" stroke="#d1d5db"/>
+<text x="34" y="102" font-size="14" fill="#6b7280">Tồn kho toàn hệ thống</text>
+<text x="34" y="140" font-size="32" font-weight="bold">12.480 <tspan font-size="14">đơn vị</tspan></text>
+<text x="34" y="164" font-size="12" fill="#059669">▲ 2,1% so với hôm qua</text>
+<rect x="310" y="76" width="270" height="110" fill="#fff" stroke="#d1d5db"/>
+<text x="324" y="102" font-size="14" fill="#6b7280">Lệnh chờ nguyên liệu</text>
+<text x="324" y="140" font-size="32" font-weight="bold">3 <tspan font-size="14">PO</tspan></text>
+<text x="324" y="164" font-size="12" fill="#dc2626">WAITING_MATERIAL — cần bổ sung</text>
+<rect x="600" y="76" width="270" height="110" fill="#fff" stroke="#d1d5db"/>
+<text x="614" y="102" font-size="14" fill="#6b7280">Cảnh báo tồn thấp</text>
+<text x="614" y="140" font-size="32" font-weight="bold">5</text>
+<text x="614" y="164" font-size="12" fill="#6b7280">từ replenishment sweep</text>
+<rect x="890" y="76" width="290" height="110" fill="#fff" stroke="#d1d5db"/>
+<text x="904" y="102" font-size="14" fill="#6b7280">Traceability (p95)</text>
+<text x="904" y="140" font-size="32" font-weight="bold">85ms</text>
+<text x="904" y="164" font-size="12" fill="#6b7280">target &lt; 60s ✔</text>
+<rect x="20" y="206" width="580" height="240" fill="#fff" stroke="#d1d5db"/>
+<text x="34" y="232" font-size="16" font-weight="bold">Nhận hàng hôm nay (FR-001)</text>
+<rect x="34" y="244" width="552" height="30" fill="#f9fafb" stroke="#e5e7eb"/>
+<text x="44" y="264" font-size="13">PO_PUR_901 — MAT_RUBBER_01 — 100 — lot RM001 [+ Nhận]</text>
+<rect x="34" y="282" width="552" height="30" fill="#f9fafb" stroke="#e5e7eb"/>
+<text x="44" y="302" font-size="13">PO_PUR_902 — MAT_SOLE_02 — 50 — lot SL014 [+ Nhận]</text>
+<rect x="34" y="400" width="180" height="34" fill="#2563eb"/>
+<text x="60" y="422" fill="#fff" font-size="14">+ Receipt (idempotent)</text>
+<rect x="620" y="206" width="560" height="240" fill="#fff" stroke="#d1d5db"/>
+<text x="634" y="232" font-size="16" font-weight="bold">Truy xuất nhanh (FR-004)</text>
+<rect x="634" y="244" width="380" height="34" fill="#f9fafb" stroke="#9ca3af"/>
+<text x="644" y="266" font-size="13" fill="#6b7280">Quét barcode / nhập lot…</text>
+<rect x="1024" y="244" width="140" height="34" fill="#1f2937"/>
+<text x="1058" y="266" fill="#fff" font-size="14">Trace</text>
+<text x="634" y="310" font-size="13">FG_RUNNER_PRO_42 ▸ WIP_SOLE ▸ RM001 (keo) ▸ …</text>
+<text x="634" y="336" font-size="13" fill="#6b7280">3 tầng — render &lt; 85ms (UAT-REP-001)</text>
+<rect x="634" y="360" width="150" height="32" fill="#fff" stroke="#dc2626"/>
+<text x="654" y="381" font-size="13" fill="#dc2626">Hold lot</text>
+<rect x="794" y="360" width="150" height="32" fill="#fff" stroke="#059669"/>
+<text x="806" y="381" font-size="13" fill="#059669">Release hold</text>
+<rect x="20" y="466" width="1160" height="214" fill="#fff" stroke="#d1d5db"/>
+<text x="34" y="492" font-size="16" font-weight="bold">Lệnh sản xuất (FR-002 / FR-003)</text>
+<text x="34" y="520" font-size="13">PO_MFG_201 — READY — [material-check] [release] [complete-traceable]</text>
+<text x="34" y="546" font-size="13">PO_MFG_202 — WAITING_MATERIAL — thiếu 10 đế (incident INC-003 đã mở → Helpdesk)</text>
+<text x="34" y="600" font-size="12" fill="#6b7280">Validation note: thủ kho tìm được nút Receive &lt; 10s; QA trace 1 lot đúng cây 3 tầng.</text>
+<text x="34" y="640" font-size="12" fill="#6b7280">Wireframe vẽ tay (SVG, import được vào Figma) — không phải screenshot sản phẩm cuối.</text>
+</svg>

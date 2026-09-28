@@ -7,22 +7,51 @@
 #          Oracle PL/SQL round trip is proven, including the PO001 shortage
 #          incident (ORA-20007 + autonomous ERROR_LOG + fix + completion).
 #
-# USAGE:   bash scripts/test-api.sh [base_url]     default http://localhost:5000
-#          VERBOSE=1 bash scripts/test-api.sh      to dump every response
-# EXIT:    0 = all checks passed, 1 = at least one check failed
+# USAGE:   MINIERP_QA_DISPOSABLE=1 DB_CONTAINER=<disposable> APP_USER=<user> \
+#            bash scripts/test-api.sh <base_url>
+#          VERBOSE=1 ...                to dump every response
+#          ... --gate-check             print the authorised target, contact nothing
+#
+#          There is NO default base URL any more. The old
+#            BASE_URL="${1:-http://localhost:5000}"
+#          was a POSITIONAL default, so an exported BASE_URL was ignored and a
+#          caller who set nothing reached whatever answered on :5000 - in this
+#          workspace the production API. A 53-check smoke run then wrote 41
+#          production rows. scripts/qa-gate.sh now refuses the run unless the
+#          target is named and the operator has declared it a disposable.
+#
+# EXIT:    0 = all checks passed, 1 = at least one check failed,
+#          78 = refused by scripts/qa-gate.sh (nothing was contacted)
 # ============================================================================
 set -uo pipefail
 
-BASE_URL="${1:-http://localhost:5000}"
+GATE_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/qa-gate.sh
+source "$GATE_HERE/qa-gate.sh"
+
+# Operator-supplied values only, captured before anything can default them.
+BASE_URL_IN="${BASE_URL:-}"
+DB_CONTAINER_IN="${DB_CONTAINER:-}"
+APP_USER_IN="${APP_USER:-}"
+QA_DB_VOLUME_IN="${QA_DB_VOLUME:-}"
+QA_DB_PROJECT_IN="${QA_DB_PROJECT:-}"
+
+if [ -t 1 ]; then
+  C_G='\033[32m'; C_R='\033[31m'; C_B='\033[36m'; C_Y='\033[33m'; C_0='\033[0m'
+else C_G=''; C_R=''; C_B=''; C_Y=''; C_0=''; fi
+
+qa_gate_parse_args "test-api.sh" "$@"
+qa_gate "test-api.sh" "$QA_BASE_URL" 0 1 "$QA_GATE_MODE"
+
+# The request keeps the operator's URL; only what is PRINTED is sanitised.
+BASE_URL="$QA_BASE_URL"
+BASE_URL_DISPLAY="$(qa_gate_sanitize "$BASE_URL")"
+
 RUN_ID="$(date +%H%M%S)"
 PASS=0; FAIL=0; FAILED_CHECKS=""
 VERBOSE="${VERBOSE:-0}"
 RESP_CODE="000"; RESP_BODY=""
 AUTH_TOKEN="${API_TOKEN:-}"
-
-if [ -t 1 ]; then
-  C_G='\033[32m'; C_R='\033[31m'; C_B='\033[36m'; C_Y='\033[33m'; C_0='\033[0m'
-else C_G=''; C_R=''; C_B=''; C_Y=''; C_0=''; fi
 
 say()   { printf '%b\n' "$*"; }
 title() { say "\n${C_B}────────────────────────────────────────────────────────${C_0}"; say "${C_B}$*${C_0}"; }
@@ -126,7 +155,7 @@ check_eq() {
 num() { python3 -c "print($1)" 2>/dev/null; }
 
 say "${C_B}========================================================================${C_0}"
-say "${C_B} Mini ERP API smoke test${C_0}   base: ${C_B}$BASE_URL${C_0}   run: ${C_B}$RUN_ID${C_0}"
+say "${C_B} Mini ERP API smoke test${C_0}   base: ${C_B}$BASE_URL_DISPLAY${C_0}   run: ${C_B}$RUN_ID${C_0}"
 say "${C_B}========================================================================${C_0}"
 
 
@@ -134,7 +163,7 @@ say "${C_B}=====================================================================
 title "STEP 0  Service & database availability"
 request GET /api/health
 if [ "$RESP_CODE" = "000" ]; then
-  say "${C_R}API is not reachable at $BASE_URL${C_0}"
+  say "${C_R}API is not reachable at $BASE_URL_DISPLAY${C_0}"
   say "${C_R}Start it first: (cd src && dotnet run --urls http://localhost:5000)${C_0}"
   exit 1
 fi

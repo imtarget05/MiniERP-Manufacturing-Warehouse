@@ -31,7 +31,7 @@ flowchart TD
     W3 --> W32["Genealogy Traversal Engine"]
     W4 --> W41["PBKDF2 & JWT Security"]
     W4 --> W42["Two-Person Approval Gate"]
-    W5 --> W51["Automated Test Suites (166+ Tests)"]
+    W5 --> W51["Automated Test Suites (302 Tests)"]
     W5 --> W52["expdp/impdp Backup Verification"]
     W6 --> W61["Legacy Data Migration Scripts"]
     W6 --> W62["Incident Support Runbook (INC-001 - INC-005)"]
@@ -45,7 +45,7 @@ flowchart TD
    - 31 normalized Oracle tables across core ERP, business automation, lot traceability, and helpdesk outbox.
    - 3 production-grade PL/SQL packages (`ERP_OPERATIONS`, `ERP_AUTOMATION`, `ERP_TRACEABILITY`).
 2. **Application Tier:**
-   - ASP.NET Core 8 Web API supporting 57 route registrations.
+   - ASP.NET Core 8 Web API supporting 62 route registrations (measured 2026-09-26).
    - Comprehensive error translation layer mapping Oracle `ORA-` errors into standardized problem details.
    - Idempotency middleware preventing duplicate scanner inputs.
 3. **Frontend Tier:**

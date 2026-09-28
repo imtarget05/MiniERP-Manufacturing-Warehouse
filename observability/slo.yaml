@@ -1,0 +1,33 @@
+# Service-Level Objectives for this repo.
+#
+# Every SLO carries: name, sli (PromQL or gate), target, window, error_budget, alert.
+# `sli: gate` means the objective is enforced by a test/load harness, not by a metric.
+# Ports match prometheus/prometheus.yml; see that file for the scrape list.
+version: "1.0"
+
+constants:
+  P95_LATENCY_SECONDS: 2
+
+targets:
+  - job: minierp
+    port: 5002
+    metrics_path: /metrics
+    source: MiniERP-Manufacturing-Warehouse service (see prometheus/prometheus.yml)
+    uncertain: false
+
+slos:
+
+  - name: database-availability
+    sli: minierp_db_up
+    target: 1
+    window: 30d
+    error_budget: 0.01
+    alert: ServiceDown
+    note: "Probes the ERP database on every scrape; 0 means the API is up but cannot serve data."
+
+  - name: process-availability
+    sli: minierp_process_up
+    target: 1
+    window: 30d
+    error_budget: 0.005
+    alert: ServiceDown

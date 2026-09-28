@@ -36,17 +36,36 @@ bash scripts/backup-db.sh /var/backups/minierp
 
 ## 3. Quy Trình Phục Hồi Dữ Liệu (Restoration Procedure)
 
-Script `scripts/restore-db.sh` có **Safety Lock hai lớp**: restore destructive bị từ chối nếu thiếu `ALLOW_DESTRUCTIVE_RESTORE=true` hoặc `CONFIRM_RESTORE=yes`/`--confirm`.
+Script `scripts/restore-db.sh` có **Safety Lock ba lớp**, tất cả đều được kiểm tra **trước khi** script chạm vào bất kỳ thứ gì (exit `78` = từ chối, không gọi `docker`/`sqlplus`/`impdp`):
+
+1. **Cổng nhận diện đích** — `scripts/qa-gate.sh`. Đích phải được **chứng minh** là môi trường disposable. `MINIERP_QA_DISPOSABLE=1` một mình **bị từ chối** nếu đích trùng danh tính production (`minierp-oracle`, `erp_user`, volume/compose project của production) — tự khai báo không phải bằng chứng. Vì đó cũng chính là giá trị mặc định của `scripts/lib.sh`, nên restore luôn phải nêu rõ đích. Chỉ `MINIERP_QA_LIVE_SMOKE='i-have-a-change-window'` mới cho phép đích có dạng production (kèm banner cảnh báo).
+2. `ALLOW_DESTRUCTIVE_RESTORE=true`
+3. `CONFIRM_RESTORE=yes` hoặc `--confirm`
+
+Xem cổng đã resolve được gì mà không chạm vào đích: `bash scripts/restore-db.sh --gate-check /path/to/backup_directory`.
+Hai lớp 2 và 3 cũng áp dụng cho `scripts/run-sql.sh` (với `RESET=1` nó **drop toàn bộ** object của schema).
 
 ### Các bước phục hồi (dùng cho test/demo; cần backup `.dmp` thật):
 ```bash
-# Bắt buộc cả hai cờ:
+# Bắt buộc cả ba lớp:
+MINIERP_QA_DISPOSABLE=1 MINIERP_QA_INSTANCE=dr-drill \
+DB_CONTAINER=minierp-qa-oracle APP_USER=erp_qa \
+QA_DB_VOLUME=minierp-qa_oracle_data QA_DB_PROJECT=minierp-qa \
 ALLOW_DESTRUCTIVE_RESTORE=true CONFIRM_RESTORE=yes \
   bash scripts/restore-db.sh /path/to/backup_directory
 
-# --confirm chỉ thay cho CONFIRM_RESTORE, vẫn cần cờ cho phép destructive:
+# --confirm chỉ thay cho CONFIRM_RESTORE, vẫn cần cờ cho phép destructive
+# và vẫn phải qua cổng danh tính ở lớp 1:
+MINIERP_QA_DISPOSABLE=1 MINIERP_QA_INSTANCE=dr-drill \
+DB_CONTAINER=minierp-qa-oracle APP_USER=erp_qa \
+QA_DB_VOLUME=minierp-qa_oracle_data QA_DB_PROJECT=minierp-qa \
 ALLOW_DESTRUCTIVE_RESTORE=true \
   bash scripts/restore-db.sh --confirm /path/to/backup_directory
+
+# Restore có chủ đích lên hệ thống thật, trong change window (có banner cảnh báo):
+MINIERP_QA_LIVE_SMOKE='i-have-a-change-window' \
+ALLOW_DESTRUCTIVE_RESTORE=true CONFIRM_RESTORE=yes \
+  bash scripts/restore-db.sh /path/to/backup_directory
 ```
 
 Quy trình thực tế:

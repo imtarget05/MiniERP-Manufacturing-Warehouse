@@ -1,0 +1,75 @@
+{
+  "name": "MiniERP ticket triage → Helpdesk",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "minierp-incident",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook from MiniERP",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://llm-gateway:8787/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Project", "value": "MiniERP-n8n" },
+            { "name": "X-Task", "value": "fast" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "fast" },
+            {
+              "name": "messages",
+              "value": "[{\"role\":\"system\",\"content\":\"Classify factory incident into {critical,high,medium} + 1-line summary. Return JSON only.\"},{\"role\":\"user\",\"content\":\"={{ $json.title }} {{ $json.description }}\"}]"
+            }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "name": "LLM classify via gateway",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://helpdesk-node:3000/api/integrations/minierp/incidents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Integration-Key", "value": "={{ $env.MINIERP_INTEGRATION_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "title", "value": "={{ $('Webhook from MiniERP').item.json.title }}" },
+            { "name": "severity", "value": "={{ $json.choices[0].message.content }}" },
+            { "name": "source", "value": "minierp-n8n" }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Create Helpdesk ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook from MiniERP": { "main": [[{ "node": "LLM classify via gateway", "type": "main", "index": 0 }]] },
+    "LLM classify via gateway": { "main": [[{ "node": "Create Helpdesk ticket", "type": "main", "index": 0 }]] }
+  },
+  "notes": "Import vào n8n → set MINIERP_INTEGRATION_KEY → POST thử từ MiniERP scripts/test-incident.sh → ticket xuất hiện ở Helpdesk /api/tickets. Đã khớp với HelpdeskIntegrationService retry-3 fail-soft phía MiniERP (src/Services/HelpdeskIntegrationService.cs) và endpoint POST /api/integrations/minierp/incidents phía Helpdesk (enterprise-routes.js)."
+}

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -94,14 +95,16 @@ public class HelpdeskIntegrationTests
     }
 
     [Fact]
-    public async Task SendIncident_WhenSuccess_SendsKeyAndIdempotencyHeaders()
+    public async Task SendIncident_WhenSuccess_SendsBearerAndIdempotencyHeaders()
     {
         var options = new HelpdeskOptions
         {
             Enabled = true,
             BaseUrl = "https://helpdesk.local",
             IntegrationKey = "test-integration-key",
-            IncidentPath = "/api/incidents",
+            // The receiver route: enterprise-routes.js:343. The old
+            // X-Integration-Key assertion this test made was the H-03 defect.
+            IncidentPath = "/api/integrations/minierp/incidents",
             MaxAttempts = 1
         };
         var fakeDb = new FakeErpDbService();
@@ -123,7 +126,9 @@ public class HelpdeskIntegrationTests
 
         var sentRequest = handler.LastRequest;
         Assert.NotNull(sentRequest);
-        Assert.Equal("test-integration-key", sentRequest!.Headers.GetValues("X-Integration-Key").First());
+        Assert.Equal("Bearer test-integration-key", sentRequest!.Headers.Authorization?.ToString());
+        Assert.False(sentRequest.Headers.Contains("X-Integration-Key"),
+            "the receiver ignores X-Integration-Key and 401s a request that only carries it");
         Assert.Equal("ERP-INC-SUCCESS-01", sentRequest.Headers.GetValues("Idempotency-Key").First());
     }
 
@@ -216,6 +221,127 @@ public class HelpdeskIntegrationTests
         Assert.Equal("FAILED", fakeDb.RecordedDeliveries["ERP-INC-FAILSOFT-01"].Status);
     }
 
+    // H-03 / plan Task 11.1: the receiver at
+    // 05-Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:343
+    // exposes POST /api/integrations/minierp/incidents and authenticates the
+    // sender with `Authorization: Bearer <integration key>`. Anything else 401s.
+    private const string ReceiverIncidentPath = "/api/integrations/minierp/incidents";
+
+    [Fact]
+    public async Task SendIncident_PostsToTheReceiverIncidentRoute()
+    {
+        var (service, handler) = ContractHarness("ERP-INC-ROUTE-01", "shared-integration-key-2026");
+
+        var result = await service.SendIncidentAsync(SampleRequest("ERP-INC-ROUTE-01"), "admin");
+
+        Assert.Equal("SENT", result.Status);
+        Assert.Equal($"https://helpdesk.local{ReceiverIncidentPath}", handler.LastRequestUri);
+    }
+
+    [Fact]
+    public async Task SendIncident_OmitsTheLegacyIntegrationKeyHeader()
+    {
+        var (service, handler) = ContractHarness("ERP-INC-HEADER-01", "shared-integration-key-2026");
+
+        await service.SendIncidentAsync(SampleRequest("ERP-INC-HEADER-01"), "admin");
+
+        Assert.Null(handler.LastIntegrationKeyHeader);
+        Assert.Equal("Bearer shared-integration-key-2026", handler.LastRequest!.Headers.Authorization?.ToString());
+        Assert.Equal("ERP-INC-HEADER-01", handler.LastIdempotencyKey);
+    }
+
+    [Fact]
+    public async Task SendIncident_WirePayload_MatchesTheReceiverContract()
+    {
+        var (service, handler) = ContractHarness("ERP-INC-PAYLOAD-01", "shared-integration-key-2026");
+        var request = SampleRequest("ERP-INC-PAYLOAD-01");
+
+        await service.SendIncidentAsync(request, "admin");
+
+        Assert.NotNull(handler.LastBody);
+        using var document = JsonDocument.Parse(handler.LastBody!);
+        var body = document.RootElement;
+
+        // enterprise-routes.js:345-346 uppercases `source` and 422s anything that
+        // is not MINIERP, so the contract is the value, not its casing; the plan's
+        // literal wording (Task 11.1 assertion 6, source = "ERP") would be rejected.
+        Assert.Equal("MINIERP", body.GetProperty("source").GetString()!.ToUpperInvariant());
+        foreach (var field in new[]
+                 {
+                     "externalRef", "category", "service", "severity", "title", "description",
+                     "referenceType", "referenceNo", "correlationId", "occurredAt"
+                 })
+        {
+            Assert.True(body.TryGetProperty(field, out _), $"wire payload is missing '{field}'");
+        }
+
+        Assert.Equal("ERP-INC-PAYLOAD-01", body.GetProperty("externalRef").GetString());
+        Assert.Equal("ERP", body.GetProperty("category").GetString());
+        Assert.Equal("Warehouse/Manufacturing", body.GetProperty("service").GetString());
+        Assert.Equal("HIGH", body.GetProperty("severity").GetString());
+        Assert.Equal("Production completion failed", body.GetProperty("title").GetString());
+        Assert.Equal("Batch PO001 material issue validation failure", body.GetProperty("description").GetString());
+        Assert.Equal("PRODUCTION_ORDER", body.GetProperty("referenceType").GetString());
+        Assert.Equal("PO001", body.GetProperty("referenceNo").GetString());
+        Assert.Equal("corr-test-12345", body.GetProperty("correlationId").GetString());
+        var occurredAt = DateTimeOffset.Parse(
+            body.GetProperty("occurredAt").GetString()!, CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind);
+        Assert.Equal(request.OccurredAt.UtcDateTime, occurredAt.UtcDateTime);
+    }
+
+    [Fact]
+    public void HelpdeskOptions_IncidentPath_DefaultsToTheReceiverRoute()
+    {
+        var variable = "HELPDESK_INCIDENT_PATH";
+        var previous = Environment.GetEnvironmentVariable(variable);
+        try
+        {
+            // An ambient override would mask the shipped default under test.
+            Environment.SetEnvironmentVariable(variable, null);
+            var options = HelpdeskOptions.FromConfiguration(new ConfigurationBuilder().Build());
+
+            Assert.Equal(ReceiverIncidentPath, options.IncidentPath);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, previous);
+        }
+    }
+
+    [Fact]
+    public void HelpdeskOptions_IncidentPath_ShippedAppsettingsMatchesTheReceiverRoute()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddJsonFile(TestRepoPaths.Resolve("src", "appsettings.json"))
+            .Build();
+
+        // Parsed configuration value, not a text match on the file.
+        Assert.Equal(ReceiverIncidentPath, configuration["Helpdesk:IncidentPath"]);
+        Assert.False(configuration.GetValue("Helpdesk:Enabled", true),
+            "external dispatch must stay off unless deployment switches it on");
+    }
+
+    private static (HelpdeskIntegrationService Service, TrackingHandler Handler) ContractHarness(
+        string externalRef, string integrationKey)
+    {
+        var options = new HelpdeskOptions
+        {
+            Enabled = true,
+            BaseUrl = "https://helpdesk.local",
+            IntegrationKey = integrationKey,
+            MaxAttempts = 1
+        };
+        var handler = new TrackingHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"incidentId\":\"HD-9001\"}", Encoding.UTF8, "application/json")
+        });
+        var service = new HelpdeskIntegrationService(new HttpClient(handler), options,
+            new FakeErpDbService(), NullLogger<HelpdeskIntegrationService>.Instance);
+        Assert.Equal(externalRef, SampleRequest(externalRef).ExternalRef);
+        return (service, handler);
+    }
+
     private static HelpdeskIncidentRequest SampleRequest(string externalRef) =>
         new(externalRef, "ERP", "Warehouse/Manufacturing", "HIGH",
             "Production completion failed",
@@ -227,15 +353,31 @@ public class HelpdeskIntegrationTests
         private readonly HttpResponseMessage _response;
         public int CallCount { get; private set; }
         public HttpRequestMessage? LastRequest { get; private set; }
+        public string? LastRequestUri { get; private set; }
+        public string? LastIntegrationKeyHeader { get; private set; }
+        public string? LastIdempotencyKey { get; private set; }
+        public string? LastBody { get; private set; }
 
         public TrackingHandler(HttpResponseMessage response) => _response = response;
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
         {
             CallCount++;
             LastRequest = request;
-            return Task.FromResult(_response);
+            // Snapshot the wire contract: the service disposes the request and
+            // its content as soon as the response is handled.
+            LastRequestUri = request.RequestUri?.ToString();
+            LastIntegrationKeyHeader = Header(request, "X-Integration-Key");
+            LastIdempotencyKey = Header(request, "Idempotency-Key");
+            LastBody = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+            return _response;
         }
+
+        private static string? Header(HttpRequestMessage request, string name) =>
+            request.Headers.TryGetValues(name, out var values) ? string.Join(",", values) : null;
     }
 
     private sealed class FailingHandler : HttpMessageHandler

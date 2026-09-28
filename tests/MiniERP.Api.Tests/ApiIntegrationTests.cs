@@ -10,22 +10,25 @@ namespace MiniERP.Api.Tests;
 /// <summary>
 /// Integration tests: they boot the real ASP.NET Core pipeline through
 /// WebApplicationFactory&lt;Program&gt; and reach Oracle through the connection
-/// string in src/appsettings.json.
+/// string the TEST RUN supplies - never the one in src/appsettings.json.
 ///
-/// Requirements: the Oracle container must be up and the SQL scripts executed
-/// (scripts/run-sql.sh). If the database is not configured, the tests report a
-/// clear failure naming the missing prerequisite instead of an opaque stack.
-///
-/// Run unit tests only:  dotnet test --filter "Category!=Integration"
-/// Run everything:       dotnet test
+/// Requirements: a disposable Oracle container must be up, the SQL scripts must
+/// have been executed (scripts/run-sql.sh), and the run must grant the DSN
+/// explicitly. TestOracleDsn refuses to start the host otherwise, naming the
+/// missing prerequisite instead of silently using a real listener:
+///   ConnectionStrings__OracleDb='User Id=...;Data Source=127.0.0.1:<port>/FREEPDB1;...' \
+///     dotnet test -c Release
+/// The no-database subset is hermetic and only needs an unreachable DSN:
+///   ConnectionStrings__OracleDb='User Id=probe;Password=probe;Data Source=127.0.0.1:1/FREEPDB1;' \
+///     dotnet test -c Release --filter "Category!=Integration"
 /// </summary>
 [Trait("Category", "Integration")]
-public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+public class ApiIntegrationTests : IClassFixture<OracleGuardedWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly OracleGuardedWebApplicationFactory _factory;
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
-    public ApiIntegrationTests(WebApplicationFactory<Program> factory)
+    public ApiIntegrationTests(OracleGuardedWebApplicationFactory factory)
     {
         _factory = factory;
         EnsureDatabaseConfigured();

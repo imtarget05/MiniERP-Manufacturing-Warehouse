@@ -3,50 +3,59 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="MiniERP Manufacturing & Warehouse — dashboard vận hành kho, BOM, lệnh sản xuất, sự cố PO001">
-  <title>MiniERP — Manufacturing & Warehouse Dashboard</title>
+  <meta name="description" content="MiniERP Manufacturing &amp; Warehouse — dashboard vận hành kho, sản xuất và giám sát sự cố, dữ liệu trực tiếp từ API">
+  <title>MiniERP — Manufacturing &amp; Warehouse Dashboard</title>
   <link rel="stylesheet" href="styles.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- runtime-config.js must load before app.js: it publishes window.__MINI_ERP_CONFIG__. -->
+  <script src="runtime-config.js"></script>
 </head>
 <body>
-  <div class="app-layout">
+  <div id="login-view" class="login-view">
+    <form id="login-form" class="login-card" autocomplete="on">
+      <div class="logo-icon" aria-hidden="true">ERP</div>
+      <h1>MiniERP</h1>
+      <p class="text-muted">Manufacturing &amp; Warehouse Operations</p>
+      <label for="login-username">Tài khoản</label>
+      <input id="login-username" name="username" autocomplete="username" spellcheck="false" required>
+      <label for="login-password">Mật khẩu</label>
+      <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+      <p id="login-error" class="form-error" role="alert" hidden></p>
+      <button id="login-submit" class="btn btn-primary" type="submit">Đăng nhập</button>
+      <p class="text-muted small">
+        Phiên làm việc chỉ tồn tại trong tab này (sessionStorage) và bị thu hồi khi đăng xuất.
+        Mọi số liệu bên dưới đều đọc trực tiếp từ API.
+      </p>
+    </form>
+  </div>
+
+  <div id="app-shell" class="app-layout" hidden>
     <aside class="sidebar">
       <div class="brand">
         <div class="logo-icon" aria-hidden="true">ERP</div>
         <div class="brand-text">
           <h2>MINI ERP</h2>
-          <span>MFG & Warehouse Ops</span>
+          <span>MFG &amp; Warehouse Ops</span>
         </div>
       </div>
       <nav class="nav-menu" aria-label="Điều hướng">
-        <button class="nav-item active" data-tab="tab-overview">Tổng quan</button>
-        <button class="nav-item" data-tab="tab-stock">Kho &amp; Tồn kho</button>
-        <button class="nav-item" data-tab="tab-mfg">Sản xuất &amp; BOM</button>
-        <button class="nav-item" data-tab="tab-lots">Nhận hàng &amp; Lots</button>
-        <button class="nav-item" data-tab="tab-incident">Sự cố PO001</button>
+        <button class="nav-item active" data-tab="tab-overview" type="button">Tổng quan</button>
+        <button class="nav-item" data-tab="tab-stock" type="button">Kho &amp; Tồn kho</button>
+        <button class="nav-item" data-tab="tab-mfg" type="button">Sản xuất</button>
+        <button class="nav-item" data-tab="tab-lots" type="button">Nhận hàng &amp; Lots</button>
+        <button class="nav-item" data-tab="tab-incident" type="button">Giám sát &amp; Sự cố</button>
       </nav>
       <div class="sidebar-footer">
         <div class="api-box">
-          <label for="api-base">API base</label>
-          <input id="api-base" value="http://localhost:5000" spellcheck="false">
-          <div class="api-row">
-            <span class="status-dot ok" id="api-dot"></span>
-            <span id="api-status" style="color:#16a34a;font-weight:600">API Sẵn sàng</span>
-            <button class="btn btn-secondary btn-sm" id="btn-check-api" type="button">Kiểm tra</button>
-          </div>
-          <p class="text-muted small">Kết nối ASP.NET Core 8 &amp; Oracle Database 21c.</p>
-          <div class="auth-box" aria-label="Đăng nhập ERP">
-            <label for="auth-username">Tài khoản ERP</label>
-            <input id="auth-username" value="admin" autocomplete="username" spellcheck="false">
-            <label for="auth-password">Mật khẩu</label>
-            <input id="auth-password" type="password" autocomplete="current-password" placeholder="Nhập khi cần mutation">
+          <span class="api-row">
+            <span class="status-dot bad" id="api-dot"></span>
+            <span id="api-status" class="text-muted">Đang kiểm tra API</span>
+          </span>
+          <div class="auth-box">
+            <p id="session-user" class="text-muted small">Chưa đăng nhập</p>
             <div class="api-row">
-              <button class="btn btn-primary btn-sm" id="btn-login" type="button">Đăng nhập</button>
-              <button class="btn btn-secondary btn-sm" id="btn-logout" type="button">Đăng xuất</button>
+              <button class="btn btn-secondary btn-sm" id="btn-reload" type="button">Tải lại</button>
+              <button class="btn btn-secondary btn-sm" id="logout-btn" type="button">Đăng xuất</button>
             </div>
-            <p id="auth-status" class="text-muted small">Chưa đăng nhập</p>
           </div>
         </div>
       </div>
@@ -56,168 +65,152 @@
       <header class="top-header">
         <div>
           <h1 id="page-title">Tổng quan vận hành</h1>
-          <div class="breadcrumb">MiniERP / TKG Taekwang / <span id="breadcrumb-tab">Tổng quan</span></div>
+          <div class="breadcrumb">MiniERP / <span id="breadcrumb-tab">Tổng quan</span></div>
         </div>
         <div class="header-actions">
           <button class="theme-toggle" id="theme-toggle" type="button">◐ Chế độ tối</button>
-          <span class="pill live" id="mode-pill">LIVE</span>
+          <span class="pill" id="mode-pill">OFFLINE</span>
         </div>
       </header>
 
       <section id="tab-overview" class="tab-pane active">
         <div class="metrics-grid">
-          <div class="metric-card"><span class="metric-label">Kho hoạt động</span><h2 id="kpi-warehouses">3</h2><span class="metric-sub">WH_RAW • WH_WIP • WH_FG</span></div>
-          <div class="metric-card"><span class="metric-label">Định mức an toàn</span><h2 id="kpi-low" style="color:#16a34a">100%</h2><span class="metric-sub" style="color:#16a34a">5/5 SKU đạt định mức</span></div>
-          <div class="metric-card"><span class="metric-label">Lệnh sản xuất</span><h2 id="kpi-open-po">1</h2><span class="metric-sub" style="color:#16a34a">PO001 • 50 đôi (Đã xong)</span></div>
-          <div class="metric-card"><span class="metric-label">Lỗi ERP hôm nay</span><h2 id="kpi-errors" style="color:#16a34a">0</h2><span class="metric-sub" style="color:#16a34a">Hệ thống ổn định • 0 lỗi</span></div>
+          <div class="metric-card">
+            <span class="metric-label">Kho hoạt động</span>
+            <h2 id="kpi-warehouses">N/A</h2>
+            <span class="metric-sub" id="kpi-warehouses-sub">GET /api/warehouse</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">SKU dưới định mức</span>
+            <h2 id="kpi-low">N/A</h2>
+            <span class="metric-sub" id="kpi-low-sub">GET /api/stock/{warehouseCode}</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Lệnh sản xuất kẹt</span>
+            <h2 id="kpi-po">N/A</h2>
+            <span class="metric-sub" id="kpi-po-sub">GET /api/automation/stale-orders</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Lỗi ERP gần nhất</span>
+            <h2 id="kpi-errors">N/A</h2>
+            <span class="metric-sub" id="kpi-errors-sub">GET /api/support/errors</span>
+          </div>
         </div>
         <div class="content-split">
           <div class="card">
-            <div class="card-head"><h3>Cảnh báo tồn kho</h3><button class="link-btn" data-goto="tab-stock">Xem kho →</button></div>
-            <div id="low-stock-list" class="recent-list">
-              <div class="stock-row" style="border-left:4px solid #16a34a">
-                <span><strong>WH_RAW</strong> — Tất cả nguyên phụ liệu đạt định mức sản xuất</span>
-                <span class="badge badge-green">540 / 500 PAIR</span>
-              </div>
+            <div class="card-head">
+              <h3>Cảnh báo tồn kho</h3>
+              <span class="card-hint">GET /api/automation/replenishment/alerts</span>
             </div>
+            <div id="low-stock-list" class="recent-list"></div>
           </div>
           <div class="card">
-            <div class="card-head"><h3>Định mức BOM — FG_RUNNER_PRO_42</h3><button class="link-btn" data-goto="tab-mfg">Chi tiết →</button></div>
-            <div id="bom-list" class="bar-chart">
-              <div class="bar-row"><span>MAT_RUBBER_01</span><div class="bar-track"><span class="bar-fill" style="width:100%"></span></div><span class="bar-value">1 đôi</span></div>
-              <div class="bar-row"><span>MAT_MESH_01</span><div class="bar-track"><span class="bar-fill" style="width:55%"></span></div><span class="bar-value">0.5 m</span></div>
-              <div class="bar-row"><span>MAT_THREAD_01</span><div class="bar-track"><span class="bar-fill" style="width:30%"></span></div><span class="bar-value">0.1 cuộn</span></div>
-              <div class="bar-row"><span>MAT_GLUE_01</span><div class="bar-track"><span class="bar-fill" style="width:40%"></span></div><span class="bar-value">0.2 kg</span></div>
-              <div class="bar-row"><span>MAT_BOX_01</span><div class="bar-track"><span class="bar-fill" style="width:70%"></span></div><span class="bar-value">1 hộp</span></div>
+            <div class="card-head">
+              <h3>Định mức BOM</h3>
+              <span class="card-hint">chưa có endpoint đọc</span>
             </div>
+            <div id="bom-list" class="bar-chart"></div>
           </div>
         </div>
         <div class="card" style="margin-top:18px">
           <div class="card-head">
-            <h3>Tồn kho tức thời — Kho Nguyên phụ liệu (WH_RAW)</h3>
-            <span class="card-hint">Đồng bộ từ Package ERP_OPERATIONS &amp; ERP_AUTOMATION</span>
+            <h3>Lệnh sản xuất không đổi trạng thái</h3>
+            <span class="card-hint">GET /api/automation/stale-orders?days=7</span>
           </div>
-          <div class="table-container">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Mã VT</th>
-                  <th>Tên vật tư</th>
-                  <th>Loại</th>
-                  <th>ĐVT</th>
-                  <th>Tồn kho</th>
-                  <th>Định mức Min</th>
-                  <th>Trạng thái</th>
-                </tr>
-              </thead>
-              <tbody id="overview-stock-tbody">
-                <tr>
-                  <td><strong>MAT_RUBBER_01</strong></td>
-                  <td>Đế cao su lưu hóa đúc sẵn (Size 42)</td>
-                  <td>RAW</td>
-                  <td>PAIR</td>
-                  <td><strong>540</strong></td>
-                  <td>500</td>
-                  <td><span class="badge badge-green">Đạt</span></td>
-                </tr>
-                <tr>
-                  <td><strong>MAT_MESH_01</strong></td>
-                  <td>Vải lưới thoáng khí</td>
-                  <td>RAW</td>
-                  <td>M</td>
-                  <td><strong>500</strong></td>
-                  <td>200</td>
-                  <td><span class="badge badge-green">Đạt</span></td>
-                </tr>
-                <tr>
-                  <td><strong>MAT_THREAD_01</strong></td>
-                  <td>Chỉ may cường lực</td>
-                  <td>RAW</td>
-                  <td>ROLL</td>
-                  <td><strong>200</strong></td>
-                  <td>50</td>
-                  <td><span class="badge badge-green">Đạt</span></td>
-                </tr>
-                <tr>
-                  <td><strong>MAT_GLUE_01</strong></td>
-                  <td>Keo dán PU</td>
-                  <td>RAW</td>
-                  <td>KG</td>
-                  <td><strong>100</strong></td>
-                  <td>40</td>
-                  <td><span class="badge badge-green">Đạt</span></td>
-                </tr>
-                <tr>
-                  <td><strong>MAT_BOX_01</strong></td>
-                  <td>Hộp carton xuất khẩu</td>
-                  <td>RAW</td>
-                  <td>PCS</td>
-                  <td><strong>600</strong></td>
-                  <td>500</td>
-                  <td><span class="badge badge-green">Đạt</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <div id="stale-list" class="recent-list"></div>
         </div>
       </section>
 
       <section id="tab-stock" class="tab-pane">
         <div class="section-toolbar">
           <select id="warehouse-select" class="filter-select" aria-label="Chọn kho">
-            <option value="WH_RAW">WH_RAW — Kho Nguyên phụ liệu</option>
-            <option value="WH_WIP">WH_WIP — Kho Bán thành phẩm</option>
-            <option value="WH_FG">WH_FG — Kho Thành phẩm XK</option>
+            <option value="">(chưa tải được danh sách kho)</option>
           </select>
           <input id="stock-search" class="search-input" placeholder="Tìm vật tư theo mã / tên..." aria-label="Tìm vật tư">
           <div class="toolbar-actions">
             <button class="btn btn-secondary" id="btn-reload-stock" type="button">Tải lại</button>
-            <button class="btn btn-primary" id="btn-open-in" type="button">+ Nhập kho</button>
-            <button class="btn btn-secondary" id="btn-open-out" type="button">− Xuất kho</button>
           </div>
         </div>
         <div class="list-meta"><span id="stock-count">—</span></div>
         <div class="table-container">
           <table class="data-table">
-            <thead><tr><th>Mã VT</th><th>Tên vật tư</th><th>Loại</th><th>ĐVT</th><th>Tồn</th><th>Min</th><th>Trạng thái</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Mã VT</th><th>Tên vật tư</th><th>Loại</th>
+                <th>ĐVT</th><th>Tồn</th><th>Min</th><th>Trạng thái</th>
+              </tr>
+            </thead>
             <tbody id="stock-tbody"></tbody>
           </table>
         </div>
         <div class="card" style="margin-top:16px">
-          <div class="card-head"><h3>Nhập / Xuất kho nhanh</h3><span class="card-hint">POST /api/stock/in • /api/stock/out</span></div>
+          <div class="card-head">
+            <h3>Nhập / Xuất kho</h3>
+            <span class="card-hint">POST /api/stock/in • /api/stock/out</span>
+          </div>
           <form id="stock-form" class="form-grid">
-            <div class="form-group"><label>Kiểu</label><select id="s-type"><option value="in">Nhập kho</option><option value="out">Xuất kho</option></select></div>
-            <div class="form-group"><label>Mã vật tư</label><input id="s-item" value="MAT_RUBBER_01" required></div>
-            <div class="form-group"><label>Số lượng</label><input id="s-qty" type="number" min="1" value="100" required></div>
-            <div class="form-group"><label>Tham chiếu</label><input id="s-ref" value="PO_PUR_901"></div>
-            <div class="modal-actions" style="border:none;padding:0;margin:0"><button class="btn btn-primary" type="submit">Ghi nhận</button></div>
+            <div class="form-group">
+              <label for="s-type">Kiểu</label>
+              <select id="s-type"><option value="in">Nhập kho</option><option value="out">Xuất kho</option></select>
+            </div>
+            <div class="form-group">
+              <label for="s-item">Mã vật tư</label>
+              <input id="s-item" spellcheck="false" required>
+            </div>
+            <div class="form-group">
+              <label for="s-qty">Số lượng</label>
+              <input id="s-qty" type="number" min="1" step="any" value="1" required>
+            </div>
+            <div class="form-group">
+              <label for="s-ref">Tham chiếu</label>
+              <input id="s-ref" spellcheck="false">
+            </div>
+            <div class="form-group form-actions">
+              <button class="btn btn-primary" type="submit">Ghi nhận</button>
+            </div>
           </form>
           <p id="stock-msg" class="form-hint"></p>
         </div>
       </section>
 
       <section id="tab-mfg" class="tab-pane">
-        <div class="content-split">
-          <div class="card">
-            <div class="card-head"><h3>Lệnh sản xuất PO001</h3><span class="badge badge-orange" id="po-status">RELEASED</span></div>
-            <p class="item-sub">50 đôi FG_RUNNER_PRO_42 • BOM V1.0 • Atomic complete (pre-flight check toàn bộ NVL)</p>
-            <div class="modal-actions" style="justify-content:flex-start">
-              <button class="btn btn-secondary" id="btn-check-material" type="button">1. Kiểm tra vật tư</button>
-              <button class="btn btn-primary" id="btn-complete-po" type="button">2. Hoàn thành PO</button>
+        <div class="card">
+          <div class="card-head">
+            <h3>Lệnh sản xuất</h3>
+            <span class="badge" id="po-status">N/A</span>
+          </div>
+          <form id="po-form" class="form-grid">
+            <div class="form-group">
+              <label for="po-input">Mã lệnh sản xuất</label>
+              <input id="po-input" spellcheck="false" placeholder="Nhập mã lệnh, ví dụ do API trả về" required>
             </div>
-            <p id="mfg-msg" class="form-hint"></p>
+            <div class="form-group form-actions">
+              <button class="btn btn-secondary" id="btn-load-po" type="button">Tải lệnh</button>
+            </div>
+          </form>
+          <p class="item-sub">Đang xem: <strong id="po-number">—</strong></p>
+          <p class="item-sub" id="po-detail">Chưa nạp lệnh sản xuất.</p>
+          <div class="modal-actions" style="justify-content:flex-start">
+            <button class="btn btn-secondary" id="btn-check-material" type="button">1. Kiểm tra vật tư</button>
+            <button class="btn btn-primary" id="btn-complete-po" type="button">2. Hoàn thành lệnh</button>
           </div>
-          <div class="card">
-            <div class="card-head"><h3>Nhật ký lỗi ERP</h3><span class="card-hint">GET /api/support/errors</span></div>
-            <div id="error-list" class="recent-list"></div>
-          </div>
+          <p id="mfg-msg" class="form-hint"></p>
         </div>
         <div class="card" style="margin-top:16px">
-          <div class="card-head"><h3>Phân bổ FEFO cho lệnh sản xuất</h3><span class="card-hint">GET /api/manufacturing/production-order/{po}/allocate-lots</span></div>
+          <div class="card-head">
+            <h3>Nhật ký lỗi ERP</h3>
+            <span class="card-hint">GET /api/support/errors?take=20</span>
+          </div>
+          <div id="error-list" class="recent-list"></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-head">
+            <h3>Phân bổ FEFO</h3>
+            <span class="card-hint">GET /api/manufacturing/production-order/{po}/allocate-lots</span>
+          </div>
           <form id="alloc-form" class="form-grid">
-            <div class="form-group"><label>Mã lệnh (PO)</label><input id="a-po" value="PO001" required></div>
-            <div class="modal-actions" style="border:none;padding:0;margin:0">
-              <button class="btn btn-secondary" type="submit">Xem phân bổ lô</button>
+            <div class="form-group form-actions">
+              <button class="btn btn-secondary" type="submit">Xem phân bổ lô theo lệnh đang nhập</button>
             </div>
           </form>
           <div id="alloc-result" class="recent-list"></div>
@@ -226,29 +219,63 @@
 
       <section id="tab-lots" class="tab-pane">
         <div class="card">
-          <div class="card-head"><h3>Nhận hàng theo Lot (PO → Lot → Label)</h3><span class="card-hint">POST /api/warehouse/receipts/{po}/receive</span></div>
+          <div class="card-head">
+            <h3>Nhận hàng theo Lot</h3>
+            <span class="card-hint">POST /api/warehouse/receipts/{po}/receive</span>
+          </div>
           <form id="lot-form" class="form-grid">
-            <div class="form-group"><label>PO mua hàng</label><input id="l-po" value="PO_PUR_LOT_01" required></div>
-            <div class="form-group"><label>Mã vật tư</label><input id="l-item" value="MAT_RUBBER_01" required></div>
-            <div class="form-group"><label>Số lượng</label><input id="l-qty" type="number" min="1" value="100" required></div>
-            <div class="form-group"><label>Mã lot</label><input id="l-lot" value="RM001-DEMO-001" required></div>
-            <div class="form-group"><label>Vị trí nhận</label><input id="l-loc" value="RCV-01" required></div>
-            <div class="form-group"><label>Idempotency key</label><input id="l-idem" value="recv-demo-001" required></div>
-            <div class="modal-actions" style="border:none;padding:0;margin:0"><button class="btn btn-primary" type="submit">Nhận hàng</button></div>
+            <div class="form-group">
+              <label for="l-po">PO mua hàng</label><input id="l-po" spellcheck="false" required>
+            </div>
+            <div class="form-group">
+              <label for="l-item">Mã vật tư</label><input id="l-item" spellcheck="false" required>
+            </div>
+            <div class="form-group">
+              <label for="l-qty">Số lượng</label><input id="l-qty" type="number" min="1" step="any" value="1" required>
+            </div>
+            <div class="form-group">
+              <label for="l-lot">Mã lot</label><input id="l-lot" spellcheck="false" required>
+            </div>
+            <div class="form-group">
+              <label for="l-loc">Vị trí nhận</label><input id="l-loc" spellcheck="false" required>
+            </div>
+            <div class="form-group">
+              <label for="l-idem">Idempotency key</label><input id="l-idem" spellcheck="false" required>
+            </div>
+            <div class="form-group form-actions">
+              <button class="btn btn-primary" type="submit">Nhận hàng</button>
+            </div>
           </form>
           <p id="lot-msg" class="form-hint"></p>
         </div>
         <div class="card" style="margin-top:16px">
-          <div class="card-head"><h3>Scan &amp; di chuyển (quét Lot → điểm đến → số lượng)</h3><span class="card-hint">POST /api/warehouse/putaway • /move</span></div>
+          <div class="card-head">
+            <h3>Scan &amp; di chuyển lot</h3>
+            <span class="card-hint">GET /api/barcodes/resolve/{code} • POST /api/warehouse/putaway • /move</span>
+          </div>
           <form id="move-form" class="form-grid">
-            <div class="form-group"><label>Quét lot</label><input id="m-lot" placeholder="LOT:RM001-DEMO-001 — Enter để tra cứu" required></div>
-            <div class="form-group"><label>Kho nguồn</label><input id="m-fromwh" value="WH_RAW"></div>
-            <div class="form-group"><label>Vị trí nguồn</label><input id="m-fromloc" value="RCV-01" required></div>
-            <div class="form-group"><label>Kho đích</label><input id="m-towh" value="WH_RAW"></div>
-            <div class="form-group"><label>Vị trí đích</label><input id="m-toloc" value="A-01-01" required></div>
-            <div class="form-group"><label>Số lượng</label><input id="m-qty" type="number" min="1" value="100" required></div>
-            <div class="form-group"><label>Idempotency key</label><input id="m-idem" value="move-demo-001" required></div>
-            <div class="modal-actions" style="border:none;padding:0;margin:0">
+            <div class="form-group">
+              <label for="m-lot">Quét lot</label><input id="m-lot" spellcheck="false" placeholder="Enter để tra cứu" required>
+            </div>
+            <div class="form-group">
+              <label for="m-fromwh">Kho nguồn</label><input id="m-fromwh" spellcheck="false" required>
+            </div>
+            <div class="form-group">
+              <label for="m-fromloc">Vị trí nguồn</label><input id="m-fromloc" spellcheck="false" required>
+            </div>
+            <div class="form-group">
+              <label for="m-towh">Kho đích</label><input id="m-towh" spellcheck="false" required>
+            </div>
+            <div class="form-group">
+              <label for="m-toloc">Vị trí đích</label><input id="m-toloc" spellcheck="false" required>
+            </div>
+            <div class="form-group">
+              <label for="m-qty">Số lượng</label><input id="m-qty" type="number" min="1" step="any" value="1" required>
+            </div>
+            <div class="form-group">
+              <label for="m-idem">Idempotency key</label><input id="m-idem" spellcheck="false" required>
+            </div>
+            <div class="form-group form-actions">
               <button class="btn btn-secondary" type="button" id="btn-resolve">Tra cứu scan</button>
               <button class="btn btn-primary" type="submit">Xác nhận</button>
             </div>
@@ -257,39 +284,54 @@
           <div id="scan-result" class="recent-list"></div>
         </div>
         <div class="card" style="margin-top:16px">
-          <div class="card-head"><h3>In nhãn lot (label workflow)</h3><span class="card-hint">POST /api/labels • reprint = job mới, không tạo lot/không đụng tồn kho</span></div>
+          <div class="card-head">
+            <h3>In nhãn lot</h3>
+            <span class="card-hint">POST /api/labels</span>
+          </div>
           <form id="label-form" class="form-grid">
-            <div class="form-group"><label>Mã lot (entityKey)</label><input id="lb-lot" value="RM001-DEMO-001" required></div>
-            <div class="form-group"><label>Loại nhãn</label>
+            <div class="form-group">
+              <label for="lb-lot">Mã lot</label><input id="lb-lot" spellcheck="false" required>
+            </div>
+            <div class="form-group">
+              <label for="lb-type">Loại nhãn</label>
               <select id="lb-type">
                 <option value="RAW_MATERIAL">RAW_MATERIAL</option>
                 <option value="FINISHED_GOOD">FINISHED_GOOD</option>
                 <option value="LOCATION">LOCATION</option>
               </select>
             </div>
-            <div class="form-group"><label>Số bản</label><input id="lb-copies" type="number" min="1" value="1"></div>
-            <div class="form-group"><label>Định dạng</label>
+            <div class="form-group">
+              <label for="lb-copies">Số bản</label><input id="lb-copies" type="number" min="1" value="1">
+            </div>
+            <div class="form-group">
+              <label for="lb-format">Định dạng</label>
               <select id="lb-format"><option value="HTML">HTML</option><option value="ZPL">ZPL</option></select>
             </div>
-            <div class="modal-actions" style="border:none;padding:0;margin:0">
+            <div class="form-group form-actions">
               <button class="btn btn-primary" type="submit">In nhãn</button>
             </div>
           </form>
           <div id="label-result" class="recent-list"></div>
         </div>
         <div class="card" style="margin-top:16px">
-          <div class="card-head"><h3>Trace genealogy (lùi / xuôi)</h3><span class="card-hint">GET /api/trace/{lotCode}?direction=backward|forward|both</span></div>
+          <div class="card-head">
+            <h3>Trace genealogy</h3>
+            <span class="card-hint">GET /api/trace/{lotCode}?direction=backward|forward|both</span>
+          </div>
           <form id="trace-form" class="form-grid">
-            <div class="form-group"><label>Mã lot</label><input id="t-lot" value="RM001-DEMO-001" required></div>
-            <div class="form-group"><label>Hướng</label>
+            <div class="form-group">
+              <label for="t-lot">Mã lot</label><input id="t-lot" spellcheck="false" required>
+            </div>
+            <div class="form-group">
+              <label for="t-dir">Hướng</label>
               <select id="t-dir">
                 <option value="both">Cả hai</option>
-                <option value="backward">Lùi (nguyên liệu đầu vào)</option>
-                <option value="forward">Xuôi (thành phẩm đầu ra)</option>
+                <option value="backward">Lùi</option>
+                <option value="forward">Xuôi</option>
               </select>
             </div>
-            <div class="modal-actions" style="border:none;padding:0;margin:0">
-              <button class="btn btn-primary" type="submit">Tra cứu genealogy</button>
+            <div class="form-group form-actions">
+              <button class="btn btn-primary" type="submit">Tra cứu</button>
             </div>
           </form>
           <div id="trace-result" class="recent-list"></div>
@@ -297,20 +339,26 @@
       </section>
 
       <section id="tab-incident" class="tab-pane">
-        <div class="card">
-          <div class="card-head"><h3>Runbook sự cố PO001 — ORA-20007</h3><span class="card-hint">sql/04_incident_scenarios.sql</span></div>
-          <ol class="timeline">
-            <li><strong>Sự cố:</strong> Complete PO001 (50 đôi) thất bại — kho chỉ còn 40 cặp đế <code>MAT_RUBBER_01</code>.</li>
-            <li><strong>Điều tra:</strong> tra <code>ERROR_LOG</code> (autonomous transaction), đối chiếu BOM vs STOCK.</li>
-            <li><strong>Quy trình:</strong> lập <code>CHANGE_REQUEST CR-2026-0901</code> ghi RCA.</li>
-            <li><strong>Xử lý:</strong> nhập bổ sung 100 đế từ <code>PO_PUR_901</code> (form Kho &amp; Tồn).</li>
-            <li><strong>Nghiệm thu:</strong> chạy lại Complete PO → <code>COMPLETED</code>, tồn FG +50.</li>
-          </ol>
+        <div class="content-split">
+          <div class="card">
+            <div class="card-head">
+              <h3>Sự cố hỗ trợ</h3>
+              <span class="card-hint">GET /api/automation/incidents?take=20</span>
+            </div>
+            <div id="incident-list" class="recent-list"></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Phê duyệt đang chờ</h3>
+              <span class="card-hint">GET /api/automation/approvals?status=PENDING</span>
+            </div>
+            <div id="approval-list" class="recent-list"></div>
+          </div>
         </div>
       </section>
     </main>
   </div>
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
   <script src="app.js"></script>
 </body>
 </html>

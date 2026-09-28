@@ -56,7 +56,16 @@ curl http://localhost:5000/api/health
 ### Path B: Disaster Recovery Restoration (If database files are corrupt)
 If Oracle logs indicate unrecoverable corruption:
 ```bash
-# 1. Execute proven restore procedure from last valid backup:
+# 1. Execute proven restore procedure from last valid backup.
+#    Layer 1 of the three locks is scripts/qa-gate.sh: the target identity must be
+#    PROVEN to be a throwaway, and MINIERP_QA_DISPOSABLE=1 alone is refused when
+#    the target is a production identity. A refusal exits 78 having contacted no
+#    docker/sqlplus/impdp. For a deliberate live restore during a change window,
+#    add MINIERP_QA_LIVE_SMOKE='i-have-a-change-window' (banner is printed).
+#    Check what the gate resolves, without touching anything, via --gate-check.
+MINIERP_QA_DISPOSABLE=1 MINIERP_QA_INSTANCE=dr-drill \
+DB_CONTAINER=minierp-qa-oracle APP_USER=erp_qa \
+QA_DB_VOLUME=minierp-qa_oracle_data QA_DB_PROJECT=minierp-qa \
 ALLOW_DESTRUCTIVE_RESTORE=true CONFIRM_RESTORE=yes \
   bash scripts/restore-db.sh backups/backup_latest
 

@@ -1,9 +1,18 @@
 # ============================================================================
-# PROJECT: 04-MiniERP-Manufacturing-Warehouse
+# PROJECT: MiniERP-Manufacturing-Warehouse (no numeric prefix)
 # FILE:    docker-compose.yml
 # PURPOSE: Full stack multi-container deployment: Oracle Database Free,
 #          ASP.NET Core 8 Web API, and Nginx Factory Operations Dashboard.
+#
+# NOTE: `name:` pins the Compose project (Docker Desktop group header) so it
+#       no longer derives from the folder name (e.g. `04-...`). Explicit
+#       `image:` pins built images so they are also created without `04-`.
+#       `oracle_data` reuses the existing volume from the old `04-...` project
+#       (3.4G live DB) instead of creating an empty one, so no data migration
+#       or hot-copy of running Oracle datafiles is needed.
 # ============================================================================
+
+name: minierp-manufacturing-warehouse
 
 services:
   oracle-db:
@@ -26,11 +35,15 @@ services:
       retries: 60
       start_period: 60s
     restart: unless-stopped
+    networks:
+      - default
+      - portfolio-net
 
   api:
     build:
       context: ./src
       dockerfile: Dockerfile
+    image: minierp-manufacturing-warehouse-api:latest
     container_name: minierp-api
     ports:
       - "5000:5000"
@@ -48,17 +61,31 @@ services:
       oracle-db:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - default
+      - portfolio-net
 
   ui:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
+    image: minierp-manufacturing-warehouse-ui:latest
     container_name: minierp-ui
     ports:
       - "8080:80"
     depends_on:
       - api
     restart: unless-stopped
+    networks:
+      - default
+      - portfolio-net
 
 volumes:
   oracle_data:
+    external: true
+    name: 04-minierp-manufacturing-warehouse_oracle_data
+
+networks:
+  portfolio-net:
+    external: true
+    name: portfolio-net

@@ -1,0 +1,79 @@
+# Self-contained observability stack for MiniERP Manufacturing & Warehouse.
+#
+#   docker compose up -d      # Prometheus :9106  Grafana :3206  Alertmanager :9306
+#   docker compose down -v     # stop and drop the TSDB
+#
+# Scrape targets are the services THIS repo runs (see prometheus/prometheus.yml).
+# A target that is not running shows as DOWN and never breaks the scrape loop.
+#
+# `name:` pins the Compose project so Docker Desktop groups these as
+# `minierp-observability` instead of colliding with another stack that also
+# lives in a folder named `observability` (same service names!).
+name: minierp-observability
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: minierp-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9106}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - portfolio-net
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: minierp-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3206}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - portfolio-net
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: minierp-alertmanager
+    restart: unless-stopped
+    ports:
+      - "${ALERTMANAGER_PORT:-9306}:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    networks:
+      - default
+      - portfolio-net
+
+volumes:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  portfolio-net:
+    external: true
+    name: portfolio-net

@@ -27,11 +27,11 @@ flowchart TD
 
 | Runbook ID | Title | Severity | Impacted Area | Runbook Link |
 |---|---|:---:|---|---|
-| **INC-001** | User Cannot Login | P2 | Authentication / PBKDF2 / Token | [`INC-001-user-cannot-login.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/support/INC-001-user-cannot-login.md) |
-| **INC-002** | Warehouse User Receives 403 Forbidden | P2 | RBAC Authorization / Approval Gate | [`INC-002-warehouse-user-receives-403.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/support/INC-002-warehouse-user-receives-403.md) |
-| **INC-003** | Inventory Quantity Mismatch | P1 | Inventory Reconciliation / Ledger | [`INC-003-inventory-quantity-mismatch.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/support/INC-003-inventory-quantity-mismatch.md) |
-| **INC-004** | Production Order Cannot Complete | P1 | BOM Explosion / Material Shortage | [`INC-004-production-order-cannot-complete.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/support/INC-004-production-order-cannot-complete.md) |
-| **INC-005** | Database Unavailable | P0 | Oracle DB Container / Listener Outage | [`INC-005-database-unavailable.md`](file:///Users/mainguyenbinhtan/Downloads/PORTFOLIO/04-MiniERP-Manufacturing-Warehouse/docs/support/INC-005-database-unavailable.md) |
+| **INC-001** | User Cannot Login | P2 | Authentication / PBKDF2 / Token | [`INC-001-user-cannot-login.md`](INC-001-user-cannot-login.md) |
+| **INC-002** | Warehouse User Receives 403 Forbidden | P2 | RBAC Authorization / Approval Gate | [`INC-002-warehouse-user-receives-403.md`](INC-002-warehouse-user-receives-403.md) |
+| **INC-003** | Inventory Quantity Mismatch | P1 | Inventory Reconciliation / Ledger | [`INC-003-inventory-quantity-mismatch.md`](INC-003-inventory-quantity-mismatch.md) |
+| **INC-004** | Production Order Cannot Complete | P1 | BOM Explosion / Material Shortage | [`INC-004-production-order-cannot-complete.md`](INC-004-production-order-cannot-complete.md) |
+| **INC-005** | Database Unavailable | P0 | Oracle DB Container / Listener Outage | [`INC-005-database-unavailable.md`](INC-005-database-unavailable.md) |
 
 ---
 

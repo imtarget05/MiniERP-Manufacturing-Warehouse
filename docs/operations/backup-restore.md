@@ -54,16 +54,38 @@ bash scripts/backup-db.sh /var/backups/minierp_snapshot
 
 ## 3. Restoration Procedure (Disaster Recovery Drill)
 
-The restoration script `scripts/restore-db.sh` features a **two-layer safety lock** to prevent accidental production data destruction. Restoring requires explicit confirmation flags:
-- `ALLOW_DESTRUCTIVE_RESTORE=true`
-- `CONFIRM_RESTORE=yes` (or `--confirm`)
+The restoration script `scripts/restore-db.sh` features a **three-layer safety gate** to prevent accidental production data destruction. The script issues `DROP USER ... CASCADE` and an `impdp` with `table_exists_action=REPLACE`, so all three layers are evaluated before it contacts anything:
+
+1. **Target identity gate** — `scripts/qa-gate.sh`. The target must be *proven* to be a throwaway. `MINIERP_QA_DISPOSABLE=1` on its own is **refused** when the target is a production identity (`minierp-oracle`, `erp_user`, the production Oracle volume or the production compose project), because a self-declared acknowledgement is not evidence. Those are also `scripts/lib.sh`'s own defaults, so a restore always has to name its target explicitly. Only `MINIERP_QA_LIVE_SMOKE='i-have-a-change-window'` authorises a production-shaped target, and it does so with a banner.
+2. `ALLOW_DESTRUCTIVE_RESTORE=true`
+3. `CONFIRM_RESTORE=yes` (or `--confirm`)
+
+Any refusal exits **78** (EX_CONFIG) having contacted nothing — no `docker`, no `sqlplus`, no `impdp`. Layer 2 and 3 also apply to `scripts/run-sql.sh`, which can drop every object in the schema when `RESET=1`.
+
+Check what the gate resolved without touching the target:
+
+```bash
+bash scripts/restore-db.sh --gate-check backups/backup_YYYYMMDD_HHMMSS
+```
 
 ### 3.1 Executing Database Restoration
 ```bash
-# Execute safe restore from target backup directory:
+# Restore into a proven throwaway (the normal DR-drill case):
+MINIERP_QA_DISPOSABLE=1 MINIERP_QA_INSTANCE=dr-drill-2026-09-26 \
+DB_CONTAINER=minierp-qa-oracle APP_USER=erp_qa \
+QA_DB_VOLUME=minierp-qa_oracle_data QA_DB_PROJECT=minierp-qa \
+ALLOW_DESTRUCTIVE_RESTORE=true CONFIRM_RESTORE=yes \
+  bash scripts/restore-db.sh backups/backup_YYYYMMDD_HHMMSS
+
+# Restore into the live system, deliberately, during a change window:
+MINIERP_QA_LIVE_SMOKE='i-have-a-change-window' \
 ALLOW_DESTRUCTIVE_RESTORE=true CONFIRM_RESTORE=yes \
   bash scripts/restore-db.sh backups/backup_YYYYMMDD_HHMMSS
 ```
+
+### 3.1.1 The contract that keeps this true
+
+`scripts/check-destructive-gate-contract.sh` runs in CI. It discovers every script in the repo that can destroy or overwrite a database (`impdp`, `DROP USER`/`DROP TABLE`/`TRUNCATE`, the drop-everything schema reset), and requires each one to source `qa-gate.sh`, to call `qa_gate` **before** its first destructive statement, and to capture `DB_CONTAINER`/`APP_USER` before `lib.sh` substitutes the production defaults. It then drives `restore-db.sh` through an environment matrix with shimmed `docker`/`sqlplus`/`impdp` and asserts **0 invocations** on every refusal, so the guarantee is behavioural and not just a text property. The same job also runs `scripts/check-portable-mktemp.sh`.
 
 ### 3.2 Internal Restoration Workflow
 ```mermaid
@@ -75,6 +97,7 @@ sequenceDiagram
     participant Verifier as scripts/verify-backup.sh
 
     Op->>Script: Run restore-db.sh with safety flags
+    Script->>Script: qa-gate.sh proves the target identity (exit 78 on refusal)
     Script->>Script: Validate dump file and metadata.json existence
     Script->>DB: Drop schema user CASCADE (Clean Slate)
     Script->>DB: Re-create user 'erp_user' with minimal privileges

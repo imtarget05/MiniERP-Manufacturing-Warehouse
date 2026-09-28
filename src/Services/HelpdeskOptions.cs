@@ -8,7 +8,7 @@ public sealed class HelpdeskOptions
     public int TimeoutSeconds { get; init; } = 5;
     public int MaxAttempts { get; init; } = 3;
     public int RetryDelayMs { get; init; } = 250;
-    public string IncidentPath { get; init; } = "/api/incidents";
+    public string IncidentPath { get; init; } = "/api/integrations/minierp/incidents";
 
     public static HelpdeskOptions FromConfiguration(IConfiguration configuration)
     {
@@ -36,7 +36,7 @@ public sealed class HelpdeskOptions
         var delay = int.TryParse(delayValue, out var d) ? d : 250;
         var path = Environment.GetEnvironmentVariable("HELPDESK_INCIDENT_PATH")
             ?? configuration["HELPDESK_INCIDENT_PATH"]
-            ?? configuration["Helpdesk:IncidentPath"] ?? "/api/incidents";
+            ?? configuration["Helpdesk:IncidentPath"] ?? "/api/integrations/minierp/incidents";
         return new HelpdeskOptions
         {
             Enabled = enabled,
@@ -45,7 +45,7 @@ public sealed class HelpdeskOptions
             TimeoutSeconds = Math.Clamp(timeout, 1, 60),
             MaxAttempts = Math.Clamp(attempts, 1, 5),
             RetryDelayMs = Math.Clamp(delay, 0, 5000),
-            IncidentPath = string.IsNullOrWhiteSpace(path) ? "/api/incidents" : path
+            IncidentPath = string.IsNullOrWhiteSpace(path) ? "/api/integrations/minierp/incidents" : path
         };
     }
 }

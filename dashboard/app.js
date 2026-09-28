@@ -1,210 +1,570 @@
 'use strict';
-/* MiniERP Dashboard — mock-first, live khi API chạy ở localhost:5000 */
+/* MiniERP Dashboard — a client of the real API.
+ *
+ * Rules this file obeys, and why the tests exist:
+ *   * No seeded demo rows and no invented KPI. Every number on screen comes
+ *     from a response body, or the panel says N/A / empty state.
+ *   * No MOCK fallback. If the API is unreachable the dashboard says so.
+ *   * Exactly one credential store: sessionStorage, two keys, cleared on
+ *     logout. Never a persistent browser store, never the URL.
+ *   * The API origin comes from window.__MINI_ERP_CONFIG__ (runtime-config.js),
+ *     never from a literal in this file.
+ */
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const apiBase = () => ($('api-base').value || '').replace(/\/$/, '');
-const TOKEN_KEY = 'minierp.accessToken';
-let accessToken = sessionStorage.getItem(TOKEN_KEY) || '';
-let currentUser = null;
 
-function authHeaders(extra = {}) {
-  const headers = { ...extra };
-  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-  return headers;
+const ACCESS_KEY = 'minierp.accessToken';
+const REFRESH_KEY = 'minierp.refreshToken';
+
+/* ---------------------------------------------------------------- session */
+
+let accessToken = sessionStorage.getItem(ACCESS_KEY) || '';
+let refreshToken = sessionStorage.getItem(REFRESH_KEY) || '';
+let currentUser = null;
+let refreshInFlight = null;
+/* Bumped whenever the session ends. Any read still in flight when it changes
+ * throws its result away instead of repopulating the panels behind the login
+ * view. */
+let readEpoch = 0;
+
+const config = () => window.__MINI_ERP_CONFIG__ || {};
+const apiBase = () => (config().apiBaseUrl || '').replace(/\/+$/, '');
+const apiUrl = (path) => apiBase() + path;
+
+function storeTokens(access, refresh) {
+  accessToken = access || '';
+  refreshToken = refresh || '';
+  if (accessToken) sessionStorage.setItem(ACCESS_KEY, accessToken);
+  else sessionStorage.removeItem(ACCESS_KEY);
+  if (refreshToken) sessionStorage.setItem(REFRESH_KEY, refreshToken);
+  else sessionStorage.removeItem(REFRESH_KEY);
+}
+
+function forgetTokens() {
+  accessToken = '';
+  refreshToken = '';
+  currentUser = null;
+  sessionStorage.removeItem(ACCESS_KEY);
+  sessionStorage.removeItem(REFRESH_KEY);
+}
+
+function showLogin(message) {
+  readEpoch += 1;
+  forgetTokens();
+  $('app-shell').hidden = true;
+  $('login-view').hidden = false;
+  const box = $('login-error');
+  if (box) {
+    box.textContent = message || '';
+    box.hidden = !message;
+  }
+  $('login-username').focus();
+}
+
+function showApp(user) {
+  currentUser = user;
+  $('login-view').hidden = true;
+  $('app-shell').hidden = false;
+  const who = $('session-user');
+  if (who) {
+    const roles = user && user.roles && user.roles.length ? ' • ' + user.roles.join(', ') : '';
+    who.textContent = user ? user.username + roles : '';
+  }
+}
+
+/* --------------------------------------------------------------- request */
+
+/* Runs a read and lets it touch the page only if the session that started it is
+ * still the current one. Without this, the seven reads that loadOverview fires
+ * can resolve after a 401/403 or a logout and repopulate the panels behind the
+ * login view. Returns false when the result was dropped. */
+async function guardedRead(read, apply) {
+  const epoch = readEpoch;
+  const result = await read();
+  if (epoch !== readEpoch) return false;
+  await apply(result);
+  return true;
+}
+
+/* Single flight: a burst of parallel 401s must produce exactly one refresh. */
+function refreshSession() {
+  if (!refreshToken) return Promise.resolve(false);
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(apiUrl('/api/auth/refresh'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!body || !body.accessToken) return false;
+        storeTokens(body.accessToken, body.refreshToken);
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => { refreshInFlight = null; });
+  }
+  return refreshInFlight;
 }
 
 async function apiFetch(path, options = {}) {
-  const response = await fetch(apiBase() + path, {
+  const send = (bearer) => fetch(apiUrl(path), {
     ...options,
-    headers: authHeaders(options.headers || {}),
+    headers: {
+      ...(options.headers || {}),
+      ...(bearer ? { Authorization: 'Bearer ' + bearer } : {}),
+    },
   });
+
+  let response = await send(accessToken);
+
   if (response.status === 401 && accessToken) {
-    accessToken = '';
-    sessionStorage.removeItem(TOKEN_KEY);
-    currentUser = null;
-    updateAuthStatus();
+    if (await refreshSession()) response = await send(accessToken);
   }
+
+  if (response.status === 401 || response.status === 403) {
+    showLogin(response.status === 403
+      ? 'Tài khoản không có quyền cho thao tác này. Đã đăng xuất để bảo vệ dữ liệu.'
+      : 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+    renderAll(true);
+  }
+
   return response;
 }
 
-function updateAuthStatus() {
-  const el = $('auth-status');
-  if (!el) return;
-  const roles = currentUser?.roles?.length ? ` • ${currentUser.roles.join(', ')}` : '';
-  el.textContent = currentUser ? `Đã đăng nhập: ${currentUser.username}${roles}` : 'Chưa đăng nhập';
+async function apiJson(path, options = {}) {
+  const response = await apiFetch(path, options);
+  const text = await response.text();
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch { body = null; }
+  return { ok: response.ok, status: response.status, body };
 }
 
-function requireLogin() {
-  if (accessToken) return true;
-  toast('Vui lòng đăng nhập trước khi thực hiện thao tác mutation.');
-  $('auth-username')?.focus();
-  return false;
+function qs(params) {
+  const pairs = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v));
+  return pairs.length ? '?' + pairs.join('&') : '';
 }
 
-async function login() {
-  const username = $('auth-username').value.trim();
-  const password = $('auth-password').value;
-  if (!username || !password) { toast('Nhập tài khoản và mật khẩu.'); return; }
-  try {
-    const r = await fetch(apiBase() + '/api/auth/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.message || j.errorCode || 'Đăng nhập thất bại');
-    accessToken = j.accessToken;
-    currentUser = j.user;
-    sessionStorage.setItem(TOKEN_KEY, accessToken);
-    $('auth-password').value = '';
-    updateAuthStatus();
-    toast(`Đã đăng nhập ${currentUser.username}`);
-  } catch (e) { toast(e.message || 'Lỗi đăng nhập.'); }
+/* --------------------------------------------------------------- widgets */
+
+function toast(message) {
+  const t = $('toast');
+  t.textContent = message;
+  t.hidden = false;
+  clearTimeout(t._h);
+  t._h = setTimeout(() => { t.hidden = true; }, 3500);
 }
 
-function logout() {
-  accessToken = ''; currentUser = null;
-  sessionStorage.removeItem(TOKEN_KEY);
-  updateAuthStatus();
-  toast('Đã đăng xuất');
-}
+const NA = 'N/A';
+const emptyRow = (cols, text) =>
+  '<tr class="empty-state"><td colspan="' + cols + '">' + esc(text) + '</td></tr>';
+const emptyList = (text) => '<div class="empty-state">' + esc(text) + '</div>';
 
-const MOCK_STOCK = {
-  WH_RAW: [
-    { itemCode: 'MAT_RUBBER_01', itemName: 'Đế cao su lưu hóa đúc sẵn (Size 42)', itemType: 'RAW', uom: 'PAIR', quantity: 540, minStock: 500 },
-    { itemCode: 'MAT_MESH_01', itemName: 'Vải lưới thoáng khí', itemType: 'RAW', uom: 'M', quantity: 320, minStock: 200 },
-    { itemCode: 'MAT_THREAD_01', itemName: 'Chỉ may cường lực', itemType: 'RAW', uom: 'ROLL', quantity: 85, minStock: 50 },
-    { itemCode: 'MAT_GLUE_01', itemName: 'Keo dán PU', itemType: 'RAW', uom: 'KG', quantity: 60, minStock: 40 },
-    { itemCode: 'MAT_BOX_01', itemName: 'Hộp carton xuất khẩu', itemType: 'RAW', uom: 'PCS', quantity: 1200, minStock: 500 },
-  ],
-  WH_WIP: [{ itemCode: 'WIP_UPPER_42', itemName: 'Thân giày bán thành phẩm', itemType: 'WIP', uom: 'PAIR', quantity: 120, minStock: 0 }],
-  WH_FG: [{ itemCode: 'FG_RUNNER_PRO_42', itemName: 'Giày thể thao Runner Pro 42', itemType: 'FG', uom: 'PAIR', quantity: 350, minStock: 100 }],
+const num = (v) => (v === null || v === undefined || v === '' ? NA : Number(v).toLocaleString('vi-VN'));
+const when = (v) => {
+  if (!v) return NA;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString('vi-VN');
 };
-const MOCK_BOM = [
-  { code: 'MAT_RUBBER_01', qty: '1 đế', pct: 100 }, { code: 'MAT_MESH_01', qty: '0.5 m', pct: 55 },
-  { code: 'MAT_THREAD_01', qty: '0.1 cuộn', pct: 30 }, { code: 'MAT_GLUE_01', qty: '0.2 kg', pct: 40 },
-  { code: 'MAT_BOX_01', qty: '1 hộp', pct: 70 },
-];
-const MOCK_ERRORS = [{ code: 'RESOLVED', ref: 'PO001', msg: 'Nhập PO_PUR_901 (+100 đế) • PO001 hoàn thành 50/50 đôi', time: '2026-09-23 10:45' }];
 
-let live = false;
-let stockCache = [];
-
-function toast(msg) {
-  const t = $('toast'); t.textContent = msg; t.hidden = false;
-  clearTimeout(t._h); t._h = setTimeout(() => { t.hidden = true; }, 3500);
+function setKpi(id, value, sub) {
+  const valueEl = $(id);
+  const subEl = $(id + '-sub');
+  if (valueEl) valueEl.textContent = value;
+  if (subEl) subEl.textContent = sub;
 }
 
-function setupNav() {
-  const titles = { 'tab-overview': 'Tổng quan vận hành', 'tab-stock': 'Kho & Tồn kho', 'tab-mfg': 'Sản xuất & BOM', 'tab-lots': 'Nhận hàng & Lots', 'tab-incident': 'Sự cố PO001' };
-  document.querySelectorAll('.nav-item').forEach((b) => b.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach((x) => x.classList.toggle('active', x === b));
-    document.querySelectorAll('.tab-pane').forEach((p) => p.classList.toggle('active', p.id === b.dataset.tab));
-    $('page-title').textContent = titles[b.dataset.tab] || '';
-    $('breadcrumb-tab').textContent = titles[b.dataset.tab] || '';
-  }));
-  document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => {
-    document.querySelector(`[data-tab="${b.dataset.goto}"]`)?.click();
-  }));
-  const th = $('theme-toggle');
-  th.addEventListener('click', () => {
-    const r = document.documentElement;
-    const n = r.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    r.setAttribute('data-theme', n);
-    th.textContent = n === 'dark' ? '○ Chế độ sáng' : '◐ Chế độ tối';
-  });
+function setApiStatus(state, text) {
+  const dot = $('api-dot');
+  const label = $('api-status');
+  const pill = $('mode-pill');
+  if (dot) dot.className = 'status-dot ' + state;
+  if (label) label.textContent = text;
+  if (pill) {
+    pill.textContent = state === 'ok' ? 'LIVE' : 'OFFLINE';
+    pill.classList.toggle('live', state === 'ok');
+  }
 }
 
-async function checkApi() {
-  const dot = $('api-dot'), st = $('api-status'), pill = $('mode-pill');
+/* ------------------------------------------------------------- read model */
+
+/* Every read below is a real endpoint. Where the host has no read contract
+ * (BOM), the panel says so instead of inventing rows. */
+/* A null array means "not read yet" and renders as N/A; an empty array means
+ * "the API answered and there is nothing", which is a real zero. */
+const data = {
+  warehouses: null,
+  stock: null,
+  stockByWarehouse: {},
+  stockLoaded: false,
+  errors: null,
+  alerts: null,
+  staleOrders: null,
+  incidents: null,
+  approvals: null,
+  productionOrder: null,
+};
+
+async function loadHealth() {
   try {
-    const res = await apiFetch('/api/health', { signal: AbortSignal.timeout(3000) });
-    if (!res.ok) throw new Error('down');
-    live = true; dot.className = 'status-dot ok'; st.textContent = 'API LIVE'; pill.textContent = 'LIVE'; pill.classList.add('live');
+    return await guardedRead(
+      () => apiJson('/api/health'),
+      ({ ok }) => setApiStatus(ok ? 'ok' : 'bad', ok ? 'API LIVE' : 'API LỖI'));
   } catch {
-    live = false; dot.className = 'status-dot bad'; st.textContent = 'MOCK (API offline)'; pill.textContent = 'MOCK'; pill.classList.remove('live');
+    if (!accessToken) return false;
+    setApiStatus('bad', 'API OFFLINE');
+    return false;
   }
-  await loadStock();
 }
 
-async function loadStock() {
-  const wh = $('warehouse-select').value;
-  const q = ($('stock-search').value || '').toLowerCase();
-  let rows = [];
-  if (live) {
-    try {
-      const r = await apiFetch('/api/stock/' + encodeURIComponent(wh));
-      rows = await r.json();
-    } catch { rows = MOCK_STOCK[wh] || []; }
-  } else rows = MOCK_STOCK[wh] || [];
-  stockCache = rows;
-  const filtered = rows.filter((s) => !q || (s.itemCode + ' ' + s.itemName).toLowerCase().includes(q));
-  $('stock-tbody').innerHTML = filtered.map((s) => {
-    const low = s.minStock > 0 && s.quantity < s.minStock;
-    return '<tr><td><strong>' + esc(s.itemCode) + '</strong></td><td>' + esc(s.itemName) + '</td><td>' + esc(s.itemType) + '</td><td>' + esc(s.uom) + '</td><td><strong>' + esc(s.quantity) + '</strong></td><td>' + esc(s.minStock) + '</td><td><span class="badge ' + (low ? 'badge-red' : 'badge-green') + '">' + (low ? 'Dưới min' : 'Đạt') + '</span></td></tr>';
-  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Không có dữ liệu</td></tr>';
-  $('stock-count').textContent = filtered.length + ' vật tư tại ' + wh + (live ? ' (LIVE)' : ' (MOCK)');
-  renderLowStock();
+async function loadWarehouses() {
+  return guardedRead(
+    () => apiJson('/api/warehouse'),
+    ({ ok, body }) => {
+      data.warehouses = ok && Array.isArray(body) ? body : null;
+      if (!data.warehouses) return;
+      renderWarehouseOptions();
+      renderStock();
+      renderOverview();
+    });
 }
 
-function renderLowStock() {
-  const all = Object.values(MOCK_STOCK).flat();
-  const lows = live ? stockCache.filter((s) => s.itemType === 'RAW' && s.minStock > 0 && s.quantity < s.minStock) : all.filter((s) => s.minStock > 0 && s.quantity < s.minStock);
-  const kpiEl = $('kpi-low');
-  if (kpiEl) {
-    kpiEl.textContent = '100%';
-    kpiEl.style.color = '#16a34a';
-  }
-  const lowListEl = $('low-stock-list');
-  if (lowListEl) {
-    lowListEl.innerHTML = '<div class="stock-row" style="border-left:4px solid #16a34a"><span><strong>WH_RAW</strong> — Toàn bộ 5 SKU nguyên phụ liệu đạt định mức sản xuất</span><span class="badge badge-green">540 / 500 PAIR • Đạt</span></div>';
-  }
-  $('bom-list').innerHTML = MOCK_BOM.map((b) => '<div class="bar-row"><span>' + esc(b.code) + '</span><div class="bar-track"><span class="bar-fill" style="width:' + b.pct + '%"></span></div><span class="bar-value">' + esc(b.qty) + '</span></div>').join('');
-  $('error-list').innerHTML = MOCK_ERRORS.map((e) => '<div class="stock-row ok" style="border-left:4px solid #16a34a"><span><strong style="color:#16a34a">' + esc(e.code) + '</strong> • ' + esc(e.ref) + ' — ' + esc(e.msg) + '</span><span class="text-muted">' + esc(e.time) + '</span></div>').join('');
+function renderWarehouseOptions() {
+  const select = $('warehouse-select');
+  const previous = select.value;
+  select.innerHTML = data.warehouses.length
+    ? data.warehouses.map((w) =>
+        '<option value="' + esc(w.code) + '">' + esc(w.code + ' — ' + w.name) + '</option>').join('')
+    : '<option value="">(chưa có kho)</option>';
+  if (data.warehouses.some((w) => w.code === previous)) select.value = previous;
 }
 
-async function submitStock(e) {
-  e.preventDefault();
+/* Selection only: the fleet-wide read already fetched every warehouse, so
+ * switching warehouses must not issue a second request for the same row set.
+ *
+ * Consequence, deliberately accepted: the table shows the balance that was read
+ * when the overview last loaded. Another operator's movement, or one made
+ * through the API directly, is not visible here until "Tải lại" (or any other
+ * trigger of loadOverview) re-reads the fleet. The KPI beside it is the same
+ * snapshot, so the two always agree with each other. */
+function loadStock() {
+  const code = $('warehouse-select').value;
+  data.stock = code ? (data.stockByWarehouse[code] ?? null) : null;
+  renderStock();
+  renderOverview();
+}
+
+async function loadErrors() {
+  return guardedRead(
+    () => apiJson('/api/support/errors' + qs({ take: 20 })),
+    ({ ok, body }) => {
+      data.errors = ok && Array.isArray(body) ? body : null;
+      renderErrors();
+      renderOverview();
+    });
+}
+
+async function loadAlerts() {
+  return guardedRead(
+    () => apiJson('/api/automation/replenishment/alerts' + qs({ status: 'OPEN', take: 20 })),
+    ({ ok, body }) => {
+      data.alerts = ok && Array.isArray(body) ? body : null;
+      renderAlerts();
+    });
+}
+
+async function loadStaleOrders() {
+  return guardedRead(
+    () => apiJson('/api/automation/stale-orders' + qs({ days: 7 })),
+    ({ ok, body }) => {
+      data.staleOrders = ok && Array.isArray(body) ? body : null;
+      renderStaleOrders();
+      renderOverview();
+    });
+}
+
+async function loadIncidents() {
+  return guardedRead(
+    () => apiJson('/api/automation/incidents' + qs({ take: 20 })),
+    ({ ok, body }) => {
+      data.incidents = ok && Array.isArray(body) ? body : null;
+      renderIncidents();
+    });
+}
+
+async function loadApprovals() {
+  return guardedRead(
+    () => apiJson('/api/automation/approvals' + qs({ status: 'PENDING', take: 20 })),
+    ({ ok, body }) => {
+      data.approvals = ok && Array.isArray(body) ? body : null;
+      renderApprovals();
+    });
+}
+
+/* The "below minimum" KPI is a fleet-wide number, so every warehouse is read -
+ * not just the one the operator happens to have selected. */
+async function loadAllStock() {
+  /* M8: the warehouse list itself may be unreadable. An unread list means no
+   * stock was read either, so the KPI must stay N/A - not a count, not a crash. */
+  if (!Array.isArray(data.warehouses)) {
+    data.stockLoaded = false;
+    loadStock();
+    return true;
+  }
+
+  return guardedRead(
+    () => Promise.all(data.warehouses.map((w) =>
+      apiJson('/api/stock/' + encodeURIComponent(w.code))
+        .then(({ ok, body }) => [w.code, ok && Array.isArray(body) ? body : null]))),
+    (settled) => {
+      for (const [code, rows] of settled) data.stockByWarehouse[code] = rows;
+      /* Read - and an empty fleet is a real zero, not a missing value. Only a
+       * warehouse list we could not read leaves the KPI unshown. */
+      data.stockLoaded = data.warehouses.length > 0 &&
+        settled.some(([, rows]) => Array.isArray(rows));
+      loadStock();
+    });
+}
+
+/* Confirms the session on every refresh cycle. Most ERP reads are anonymous on
+ * the host, so this is the request that proves the bearer is still good - and
+ * therefore the one that triggers a refresh when it is not. */
+async function loadSession() {
+  return guardedRead(
+    () => apiJson('/api/auth/me'),
+    ({ ok, body }) => {
+      if (ok && body && body.username) {
+        const roles = body.roles && body.roles.length ? ' • ' + body.roles.join(', ') : '';
+        const who = $('session-user');
+        if (who) who.textContent = body.username + roles;
+      }
+    });
+}
+
+async function loadOverview() {
+  await loadHealth();
+  await loadSession();
+  await loadWarehouses();
+  await Promise.all([loadAllStock(), loadErrors(), loadAlerts(), loadStaleOrders(),
+                     loadIncidents(), loadApprovals()]);
+}
+
+/* --------------------------------------------------------------- renderers */
+
+function renderStock(query) {
+  const q = (query !== undefined ? query : ($('stock-search').value || '')).toLowerCase();
+  const rows = Array.isArray(data.stock) ? data.stock : null;
+  const filtered = rows
+    ? rows.filter((s) => !q || String(s.itemCode + ' ' + s.itemName).toLowerCase().includes(q))
+    : [];
+
+  $('stock-tbody').innerHTML = filtered.length
+    ? filtered.map((s) => {
+        const low = s.isBelowMinStock === true ||
+          (Number(s.minStock) > 0 && Number(s.quantity) < Number(s.minStock));
+        return '<tr><td><strong>' + esc(s.itemCode) + '</strong></td>' +
+          '<td>' + esc(s.itemName) + '</td><td>' + esc(s.itemType) + '</td>' +
+          '<td>' + esc(s.uom) + '</td><td><strong>' + esc(num(s.quantity)) + '</strong></td>' +
+          '<td>' + esc(num(s.minStock)) + '</td>' +
+          '<td><span class="badge ' + (low ? 'badge-red' : 'badge-green') + '">' +
+          (low ? 'Dưới min' : 'Đạt') + '</span></td></tr>';
+      }).join('')
+    : emptyRow(7, rows === null ? NA + ' — chưa đọc được tồn kho của kho này.'
+        : (rows.length ? 'Không có vật tư khớp bộ lọc.' : 'Kho này chưa có bản ghi tồn kho.'));
+
+  $('stock-count').textContent = filtered.length + ' vật tư • nguồn: GET /api/stock/' +
+    ($('warehouse-select').value || '-');
+}
+
+const isLoaded = (rows) => Array.isArray(rows);
+
+function renderOverview() {
+  const allStock = Object.values(data.stockByWarehouse).filter(Array.isArray).flat();
+  const loadedWarehouses = Object.values(data.stockByWarehouse).filter(Array.isArray).length;
+  const lowCount = allStock.filter((s) =>
+    s.isBelowMinStock === true ||
+    (Number(s.minStock) > 0 && Number(s.quantity) < Number(s.minStock))).length;
+
+  setKpi('kpi-warehouses', isLoaded(data.warehouses) ? String(data.warehouses.length) : NA,
+    isLoaded(data.warehouses) ? 'GET /api/warehouse' : 'chưa đọc được danh sách kho');
+  setKpi('kpi-low', data.stockLoaded ? String(lowCount) : NA,
+    data.stockLoaded ? lowCount + '/' + allStock.length + ' SKU dưới định mức' : 'chưa đọc được tồn kho');
+  setKpi('kpi-po', isLoaded(data.staleOrders) ? String(data.staleOrders.length) : NA,
+    'lệnh sản xuất không đổi trạng thái ≥ 7 ngày');
+  setKpi('kpi-errors', isLoaded(data.errors) ? String(data.errors.length) : NA,
+    isLoaded(data.errors)
+      ? (data.errors.length ? 'ghi nhận gần nhất: ' + when(data.errors[0].createdAt) : 'không có lỗi gần đây')
+      : 'chưa đọc được nhật ký lỗi');
+
+  // BOM: the host exposes POST /api/manufacturing/bom/line only. There is no
+  // read contract, so this panel states that rather than rendering invented
+  // consumption bars.
+  $('bom-list').innerHTML = emptyList(
+    NA + ' — API chưa có endpoint đọc BOM (chỉ có POST /api/manufacturing/bom/line). ' +
+    'Xem vật tư thực tế tại tab Kho.');
+}
+
+function renderErrors() {
+  $('error-list').innerHTML = !isLoaded(data.errors)
+    ? emptyList('Chưa đọc được nhật ký lỗi ERP.')
+    : data.errors.length
+    ? data.errors.map((e) =>
+        '<div class="stock-row"><span><strong>' + esc(e.errorCode) + '</strong>' +
+        (e.referenceNo ? ' • ' + esc(e.referenceNo) : '') + ' — ' + esc(e.message) + '</span>' +
+        '<span class="text-muted">' + esc(when(e.createdAt)) + '</span></div>').join('')
+    : emptyList('Không có lỗi ERP nào trong 20 bản ghi gần nhất.');
+}
+
+function renderAlerts() {
+  $('low-stock-list').innerHTML = !isLoaded(data.alerts)
+    ? emptyList('Chưa đọc được cảnh báo tồn kho.')
+    : data.alerts.length
+    ? data.alerts.map((a) =>
+        '<div class="stock-row"><span><strong>' + esc(a.itemCode) + '</strong> @ ' +
+        esc(a.warehouseCode) + ' — còn ' + esc(num(a.quantityAvailable)) +
+        ', đề xuất nhập ' + esc(num(a.quantitySuggested)) + '</span>' +
+        '<span class="badge badge-red">' + esc(a.status) + '</span></div>').join('')
+    : emptyList('Không có cảnh báo tồn kho mở.');
+}
+
+function renderStaleOrders() {
+  $('stale-list').innerHTML = !isLoaded(data.staleOrders)
+    ? emptyList('Chưa đọc được danh sách lệnh kẹt.')
+    : data.staleOrders.length
+    ? data.staleOrders.map((o) =>
+        '<div class="stock-row"><span><strong>' + esc(o.productionOrderNo) + '</strong> — ' +
+        esc(o.finishedGoodCode) + ' • ' + esc(o.status) + '</span>' +
+        '<span class="text-muted">đứng yên ' + esc(o.daysIdle) + ' ngày</span></div>').join('')
+    : emptyList('Không có lệnh sản xuất bị kẹt.');
+}
+
+function renderIncidents() {
+  $('incident-list').innerHTML = !isLoaded(data.incidents)
+    ? emptyList('Chưa đọc được danh sách sự cố.')
+    : data.incidents.length
+    ? data.incidents.map((i) =>
+        '<div class="stock-row"><span><strong>' + esc(i.errorCode) + '</strong>' +
+        (i.refNo ? ' • ' + esc(i.refNo) : '') + ' — ' + esc(i.title) + '</span>' +
+        '<span class="text-muted">' + esc(i.status) + ' • ' + esc(when(i.createdAt)) + '</span></div>').join('')
+    : emptyList('Chưa ghi nhận sự cố hỗ trợ nào.');
+}
+
+function renderApprovals() {
+  $('approval-list').innerHTML = !isLoaded(data.approvals)
+    ? emptyList('Chưa đọc được danh sách phê duyệt.')
+    : data.approvals.length
+    ? data.approvals.map((a) =>
+        '<div class="stock-row"><span><strong>' + esc(a.approvalNo) + '</strong> — ' +
+        esc(a.action) + (a.refNo ? ' • ' + esc(a.refNo) : '') + '</span>' +
+        '<span class="text-muted">' + esc(a.status) + '</span></div>').join('')
+    : emptyList('Không có phê duyệt nào đang chờ.');
+}
+
+function renderAll(reset) {
+  if (reset) {
+    data.warehouses = null;
+    data.stock = null;
+    data.errors = null;
+    data.alerts = null;
+    data.staleOrders = null;
+    data.incidents = null;
+    data.approvals = null;
+    data.stockByWarehouse = {};
+    data.stockLoaded = false;
+    data.productionOrder = null;
+  }
+  renderOverview();
+  renderStock();
+  renderErrors();
+  renderAlerts();
+  renderStaleOrders();
+  renderIncidents();
+  renderApprovals();
+  renderProductionOrder();
+}
+
+/* ------------------------------------------------------------- production */
+
+/* There is no "list production orders" endpoint, so the operator names the
+ * order. Nothing about a specific order is pre-filled. */
+function renderProductionOrder() {
+  const po = data.productionOrder;
+  const badge = $('po-status');
+  const detail = $('po-detail');
+  const number = $('po-number');
+
+  number.textContent = po ? po.productionOrderNo : '—';
+  if (po) {
+    badge.textContent = po.status;
+    badge.className = 'badge ' + (po.status === 'COMPLETED' ? 'badge-green' : 'badge-orange');
+    detail.textContent = po.finishedGoodCode + ' • kế hoạch ' + num(po.plannedQuantity) +
+      ' • đã làm ' + num(po.doneQuantity) + ' • kho ' + po.warehouseCode +
+      ' • tạo ' + when(po.createdAt);
+  } else {
+    badge.textContent = NA;
+    badge.className = 'badge';
+    detail.textContent = 'Chưa nạp lệnh sản xuất. Nhập mã lệnh rồi bấm "Tải lệnh".';
+  }
+}
+
+async function loadProductionOrder() {
+  const poNo = $('po-input').value.trim();
+  if (!poNo) { data.productionOrder = null; renderProductionOrder(); return; }
+  const { ok, body } = await apiJson('/api/manufacturing/production-order/' + encodeURIComponent(poNo));
+  data.productionOrder = ok && body ? body : null;
+  renderProductionOrder();
+  $('mfg-msg').textContent = data.productionOrder
+    ? 'Đã tải lệnh ' + poNo + ' từ API.'
+    : 'Không tìm thấy lệnh ' + poNo + ' trên hệ thống.';
+}
+
+async function runProductionAction(kind) {
+  const poNo = $('po-input').value.trim();
+  if (!poNo) { $('mfg-msg').textContent = 'Nhập mã lệnh sản xuất trước.'; return; }
+  if (!accessToken) { showLogin(); return; }
+
+  const path = kind === 'check'
+    ? '/api/automation/production-order/' + encodeURIComponent(poNo) + '/material-check'
+    : '/api/automation/production-order/' + encodeURIComponent(poNo) + '/complete';
+
+  const { ok, body } = await apiJson(path, { method: 'POST' });
+  $('mfg-msg').textContent = ok
+    ? (body.message || 'Thành công.')
+    : ((body && (body.message || body.errorCode)) || 'Lệnh thất bại (HTTP).');
+  if (kind === 'complete' && ok) await loadProductionOrder();
+}
+
+/* -------------------------------------------------------------- mutations */
+
+async function submitStock(event) {
+  event.preventDefault();
+  if (!accessToken) { showLogin(); return; }
+
   const type = $('s-type').value;
-  const payload = { warehouseCode: $('warehouse-select').value, itemCode: $('s-item').value.trim(), quantity: Number($('s-qty').value), referenceNo: $('s-ref').value.trim() || 'MANUAL' };
-  if (live) {
-    if (!requireLogin()) return;
-    try {
-      const r = await apiFetch('/api/stock/' + type, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const j = await r.json();
-      $('stock-msg').textContent = (j.message || 'OK') + (j.balance != null ? ' • Tồn mới: ' + j.balance : '');
-      toast('Đã ghi nhận ' + (type === 'in' ? 'nhập' : 'xuất') + ' kho');
-      await loadStock(); return;
-    } catch { /* fallback mock */ }
-  }
-  const list = MOCK_STOCK[payload.warehouseCode] || (MOCK_STOCK[payload.warehouseCode] = []);
-  const line = list.find((x) => x.itemCode === payload.itemCode);
-  if (line) line.quantity = Math.max(0, line.quantity + (type === 'in' ? payload.quantity : -payload.quantity));
-  $('stock-msg').textContent = 'MOCK: đã ' + (type === 'in' ? 'nhập +' : 'xuất −') + payload.quantity + ' ' + payload.itemCode;
-  await loadStock();
+  const payload = {
+    warehouseCode: $('warehouse-select').value,
+    itemCode: $('s-item').value.trim(),
+    quantity: Number($('s-qty').value),
+    referenceNo: $('s-ref').value.trim() || 'MANUAL',
+  };
+  const { ok, body } = await apiJson('/api/stock/' + type, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  $('stock-msg').textContent = ok
+    ? ((body && body.message) || 'Ghi nhận thành công.') +
+      (body && body.balance != null ? ' • Tồn mới: ' + body.balance : '')
+    : ((body && (body.message || body.errorCode)) || 'Lệnh thất bại (HTTP).');
+  if (ok) { await loadAllStock(); await loadAlerts(); }
 }
 
-async function completePo(checkOnly) {
-  const msg = $('mfg-msg');
-  if (live) {
-    if (!requireLogin()) return;
-    try {
-      const url = checkOnly ? '/api/automation/production-order/PO001/material-check' : '/api/manufacturing/production-order/PO001/complete';
-      const r = await apiFetch(url, { method: 'POST' });
-      const j = await r.json();
-      msg.textContent = j.message || JSON.stringify(j);
-      if (!checkOnly && r.ok) { $('po-status').textContent = 'COMPLETED'; $('po-status').className = 'badge badge-green'; }
-      toast(checkOnly ? 'Đã kiểm tra vật tư' : 'Đã hoàn thành PO (LIVE)');
-      return;
-    } catch { /* mock */ }
-  }
-  if (checkOnly) msg.textContent = 'MOCK pre-flight: MAT_RUBBER_01 cần 50, còn 40 → ORA-20007. Hãy nhập bổ sung ở tab Kho.';
-  else { msg.textContent = 'MOCK: sau khi nhập 100 đế → đủ NVL → PO001 COMPLETED, FG +50.'; $('po-status').textContent = 'COMPLETED'; $('po-status').className = 'badge badge-green'; }
-}
-
-/* ---- Phase 2: lot receive / scan / move (keyboard-wedge scanner first) ---- */
-
-async function submitLotReceive(e) {
-  e.preventDefault();
+async function submitLotReceive(event) {
+  event.preventDefault();
+  if (!accessToken) { showLogin(); return; }
   const payload = {
     itemCode: $('l-item').value.trim(),
     qty: Number($('l-qty').value),
@@ -212,147 +572,265 @@ async function submitLotReceive(e) {
     receivingLocationCode: $('l-loc').value.trim(),
     idempotencyKey: $('l-idem').value.trim(),
   };
-  if (!live) { $('lot-msg').textContent = 'MOCK: API offline — không thể nhận hàng thật.'; return; }
-  if (!requireLogin()) return;
-  try {
-    const r = await apiFetch('/api/warehouse/receipts/' + encodeURIComponent($('l-po').value.trim()) + '/receive', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  const { ok, body } = await apiJson(
+    '/api/warehouse/receipts/' + encodeURIComponent($('l-po').value.trim()) + '/receive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
-    const j = await r.json();
-    $('lot-msg').textContent = (j.replayed ? '[REPLAY] trùng lặp đã bỏ qua — ' : '') + (j.message || JSON.stringify(j));
-    toast(j.replayed ? 'Trùng lặp: không phát sinh tồn kho mới' : 'Đã nhận lot');
-    await loadStock();
-  } catch { $('lot-msg').textContent = 'Lỗi kết nối API.'; }
+  $('lot-msg').textContent = ok
+    ? ((body && body.replayed ? '[REPLAY] ' : '') + (body.message || 'Đã nhận lot.'))
+    : ((body && (body.message || body.errorCode)) || 'Nhận hàng thất bại (HTTP).');
+  if (ok) await loadAllStock();
 }
 
 async function resolveScan() {
+  const code = $('m-lot').value.trim();
   const box = $('scan-result');
-  if (!live) { box.innerHTML = '<div class="stock-row">MOCK: API offline.</div>'; return; }
-  try {
-    const r = await apiFetch('/api/barcodes/resolve/' + encodeURIComponent($('m-lot').value.trim()));
-    const j = await r.json();
-    box.innerHTML = r.ok
-      ? '<div class="stock-row ok"><span><strong>' + esc(j.entityType) + '</strong> • ' + esc(j.entityKey) + (j.itemCode ? ' • ' + esc(j.itemCode) : '') + '</span><span class="text-muted">' + esc(j.status || '') + '</span></div>'
-      : '<div class="stock-row" style="border-left:4px solid #dc2626"><span>Lỗi: ' + esc(j.title || JSON.stringify(j)) + '</span></div>';
-  } catch { box.innerHTML = '<div class="stock-row">Lỗi kết nối API.</div>'; }
+  if (!code) { box.innerHTML = emptyList('Nhập mã lot cần tra cứu.'); return; }
+  const { ok, body } = await apiJson('/api/barcodes/resolve/' + encodeURIComponent(code));
+  box.innerHTML = ok
+    ? '<div class="stock-row ok"><span><strong>' + esc(body.entityType) + '</strong> • ' +
+      esc(body.entityKey) + (body.itemCode ? ' • ' + esc(body.itemCode) : '') + '</span>' +
+      '<span class="text-muted">' + esc(body.status || '') + '</span></div>'
+    : '<div class="stock-row danger"><span>Lỗi tra cứu: ' +
+      esc((body && (body.title || body.message || body.errorCode)) || 'không tìm thấy') + '</span></div>';
 }
 
-async function submitLotMove(e) {
-  e.preventDefault();
-  const sameWh = $('m-fromwh').value.trim() === $('m-towh').value.trim();
-  const payload = sameWh
-    ? { lotCode: $('m-lot').value.replace(/^LOT:/i, '').trim(), fromLocationCode: $('m-fromloc').value.trim(), toLocationCode: $('m-toloc').value.trim(), qty: Number($('m-qty').value), idempotencyKey: $('m-idem').value.trim() }
-    : { lotCode: $('m-lot').value.replace(/^LOT:/i, '').trim(), fromWarehouseCode: $('m-fromwh').value.trim(), fromLocationCode: $('m-fromloc').value.trim(), toWarehouseCode: $('m-towh').value.trim(), toLocationCode: $('m-toloc').value.trim(), qty: Number($('m-qty').value), idempotencyKey: $('m-idem').value.trim() };
-  if (!live) { $('move-msg').textContent = 'MOCK: API offline — không thể di chuyển thật.'; return; }
-  if (!requireLogin()) return;
-  try {
-    const r = await apiFetch(sameWh ? '/api/warehouse/putaway' : '/api/warehouse/move', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-    });
-    const j = await r.json();
-    $('move-msg').textContent = (j.replayed ? '[REPLAY] trùng lặp đã bỏ qua — ' : '') + (j.message || JSON.stringify(j));
-    toast('Đã di chuyển lot');
-    $('m-lot').focus(); // scanner-first: return focus after each op
-    $('m-lot').select();
-    await loadStock();
-  } catch { $('move-msg').textContent = 'Lỗi kết nối API.'; }
+async function submitLotMove(event) {
+  event.preventDefault();
+  if (!accessToken) { showLogin(); return; }
+  const sameWarehouse = $('m-fromwh').value.trim() === $('m-towh').value.trim();
+  const lot = $('m-lot').value.replace(/^LOT:/i, '').trim();
+  const payload = sameWarehouse
+    ? { lotCode: lot, fromLocationCode: $('m-fromloc').value.trim(),
+        toLocationCode: $('m-toloc').value.trim(), qty: Number($('m-qty').value),
+        idempotencyKey: $('m-idem').value.trim() }
+    : { lotCode: lot, fromWarehouseCode: $('m-fromwh').value.trim(),
+        fromLocationCode: $('m-fromloc').value.trim(), toWarehouseCode: $('m-towh').value.trim(),
+        toLocationCode: $('m-toloc').value.trim(), qty: Number($('m-qty').value),
+        idempotencyKey: $('m-idem').value.trim() };
+
+  const { ok, body } = await apiJson(sameWarehouse ? '/api/warehouse/putaway' : '/api/warehouse/move', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  $('move-msg').textContent = ok
+    ? ((body && body.replayed ? '[REPLAY] ' : '') + (body.message || 'Đã di chuyển lot.'))
+    : ((body && (body.message || body.errorCode)) || 'Di chuyển thất bại (HTTP).');
+  if (ok) await loadAllStock();
 }
 
-/* ---- Phase 3: FEFO allocation preview + genealogy trace ---- */
-
-async function loadAllocation(e) {
-  e.preventDefault();
+async function loadAllocation(event) {
+  event.preventDefault();
+  const poNo = $('po-input').value.trim();
   const box = $('alloc-result');
-  if (!live) { box.innerHTML = '<div class="stock-row">MOCK: API offline.</div>'; return; }
-  try {
-    const po = $('a-po').value.trim();
-    const r = await apiFetch('/api/manufacturing/production-order/' + encodeURIComponent(po) + '/allocate-lots');
-    const j = await r.json();
-    if (!r.ok) { box.innerHTML = '<div class="stock-row" style="border-left:4px solid #dc2626"><span>' + esc(j.message || JSON.stringify(j)) + '</span></div>'; return; }
-    box.innerHTML = (j.lines || []).map((l) =>
-      '<div class="stock-row' + (l.isShort ? '' : ' ok') + '"><span><strong>' + esc(l.itemCode) + '</strong> • ' + esc(l.traceMode) +
-      '</span><span>cần ' + l.qtyRequired + ' • sẵn ' + l.qtyAvailableIssuable +
-      (l.suggestedLots && l.suggestedLots.length ? ' • lô: ' + l.suggestedLots.map((s) => esc(s.lotCode)).join(', ') : '') +
-      (l.isShort ? ' • <strong style="color:#dc2626">THIẾU</strong>' : '') + '</span></div>'
-    ).join('') || '<div class="stock-row">Không có dòng BOM.</div>';
-  } catch { box.innerHTML = '<div class="stock-row">Lỗi kết nối API.</div>'; }
+  if (!poNo) { box.innerHTML = emptyList('Nhập mã lệnh sản xuất trước.'); return; }
+
+  const { ok, body } = await apiJson(
+    '/api/manufacturing/production-order/' + encodeURIComponent(poNo) + '/allocate-lots');
+  if (!ok) {
+    box.innerHTML = emptyList('Không phân bổ được: ' +
+      ((body && (body.message || body.title || body.errorCode)) || 'lỗi HTTP'));
+    return;
+  }
+  const lines = (body && body.lines) || [];
+  box.innerHTML = lines.length
+    ? lines.map((l) =>
+        '<div class="stock-row' + (l.isShort ? ' danger' : ' ok') + '"><span><strong>' +
+        esc(l.itemCode) + '</strong> • ' + esc(l.traceMode) + '</span><span>cần ' +
+        esc(num(l.qtyRequired)) + ' • sẵn ' + esc(num(l.qtyAvailableIssuable)) +
+        (l.suggestedLots && l.suggestedLots.length
+          ? ' • lô: ' + l.suggestedLots.map((s) => esc(s.lotCode)).join(', ') : '') +
+        (l.isShort ? ' • THIẾU' : '') + '</span></div>').join('')
+    : emptyList('Lệnh này không có dòng định mức để phân bổ.');
 }
 
-function renderTraceNode(n) {
-  const bits = (n.itemCode ? ' • ' + n.itemCode : '') + ((n.qty !== null && n.qty !== undefined) ? ' • qty ' + n.qty : '');
-  let html = '<div class="stock-row"><span><strong>' + esc(n.kind) + '</strong> ' + esc(n.key) + esc(bits) + '</span></div>';
-  if (n.children && n.children.length) {
-    html += n.children.map((c) => '<div style="margin-left:18px">' + renderTraceNode(c) + '</div>').join('');
+function renderTraceNode(node) {
+  const bits = (node.itemCode ? ' • ' + node.itemCode : '') +
+    (node.qty !== null && node.qty !== undefined ? ' • qty ' + num(node.qty) : '');
+  let html = '<div class="stock-row"><span><strong>' + esc(node.kind) + '</strong> ' +
+    esc(node.key) + esc(bits) + '</span></div>';
+  if (node.children && node.children.length) {
+    html += node.children.map((c) => '<div style="margin-left:18px">' +
+      renderTraceNode(c) + '</div>').join('');
   }
   return html;
 }
 
-async function lookupTrace(e) {
-  e.preventDefault();
+async function lookupTrace(event) {
+  event.preventDefault();
   const box = $('trace-result');
-  if (!live) { box.innerHTML = '<div class="stock-row">MOCK: API offline.</div>'; return; }
-  try {
-    const lot = $('t-lot').value.trim();
-    const dir = $('t-dir').value;
-    const r = await apiFetch('/api/trace/' + encodeURIComponent(lot) + '?direction=' + encodeURIComponent(dir));
-    const j = await r.json();
-    box.innerHTML = r.ok
-      ? '<div class="stock-row ok"><span>Hướng tra cứu: ' + esc(j.direction) + '</span></div>' + renderTraceNode(j.trace)
-      : '<div class="stock-row" style="border-left:4px solid #dc2626"><span>' + esc(j.title || JSON.stringify(j)) + '</span></div>';
-  } catch { box.innerHTML = '<div class="stock-row">Lỗi kết nối API.</div>'; }
+  const lot = $('t-lot').value.trim();
+  if (!lot) { box.innerHTML = emptyList('Nhập mã lot cần truy vết.'); return; }
+
+  const { ok, body } = await apiJson('/api/trace/' + encodeURIComponent(lot) +
+    qs({ direction: $('t-dir').value }));
+  box.innerHTML = ok
+    ? '<div class="stock-row ok"><span>Hướng tra cứu: ' + esc(body.direction) + '</span></div>' +
+      renderTraceNode(body.trace)
+    : emptyList('Không truy vết được: ' +
+      ((body && (body.title || body.message || body.errorCode)) || 'lỗi HTTP'));
 }
 
-/* ---- Phase 4: label print / reprint (audit row only, no stock effect) ---- */
-
-async function printLabel(e) {
-  e.preventDefault();
+async function printLabel(event) {
+  event.preventDefault();
+  if (!accessToken) { showLogin(); return; }
   const box = $('label-result');
-  if (!live) { box.innerHTML = '<div class="stock-row">MOCK: API offline.</div>'; return; }
-  if (!requireLogin()) return;
+  const payload = {
+    entityType: 'LOT',
+    entityKey: $('lb-lot').value.trim(),
+    labelType: $('lb-type').value,
+    copies: Number($('lb-copies').value) || 1,
+    format: $('lb-format').value,
+  };
+  const { ok, body } = await apiJson('/api/labels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!ok) {
+    box.innerHTML = emptyList('Không tạo được nhãn: ' +
+      ((body && (body.message || body.errorCode)) || 'lỗi HTTP'));
+    return;
+  }
+  const job = body.job || {};
+  /* ZPL is escaped here; the HTML branch is not, because body.rendered is
+   // html-encoded field by field by LabelRenderService (see
+   // AppJs_OnlyInjectsLabelMarkupTheServiceHasEncoded). Do not inject raw markup
+   // here without that guarantee. */
+  box.innerHTML = '<div class="stock-row ok"><span>Job #' + esc(job.printJobId) + ' • ' +
+    esc(job.format) + ' × ' + esc(job.copies) + '</span></div>' +
+    (job.format === 'ZPL'
+      ? '<pre class="label-pre">' + esc(body.rendered) + '</pre>'
+      : '<div class="stock-row">' + body.rendered + '</div>');
+}
+
+/* ---------------------------------------------------------------- session */
+
+async function login() {
+  const username = $('login-username').value.trim();
+  const password = $('login-password').value;
+  if (!username || !password) {
+    $('login-error').textContent = 'Nhập tài khoản và mật khẩu.';
+    $('login-error').hidden = false;
+    return;
+  }
+
+  const button = $('login-submit');
+  button.disabled = true;
   try {
-    const payload = {
-      entityType: 'LOT',
-      entityKey: $('lb-lot').value.trim(),
-      labelType: $('lb-type').value,
-      copies: Number($('lb-copies').value) || 1,
-      format: $('lb-format').value,
-    };
-    const r = await apiFetch('/api/labels', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    const response = await fetch(apiUrl('/api/auth/login'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
     });
-    const j = await r.json();
-    if (!r.ok) { box.innerHTML = '<div class="stock-row" style="border-left:4px solid #dc2626"><span>' + esc(j.message || JSON.stringify(j)) + '</span></div>'; return; }
-    box.innerHTML = j.job.format === 'ZPL'
-      ? '<div class="stock-row ok"><span>Job #' + j.job.printJobId + ' • ZPL × ' + j.job.copies + '</span></div><pre style="white-space:pre-wrap">' + esc(j.rendered) + '</pre>'
-      : '<div class="stock-row ok"><span>Job #' + j.job.printJobId + ' • HTML × ' + j.job.copies + '</span></div>' + j.rendered;
-    toast('Đã tạo label job (reprint an toàn)');
-  } catch { box.innerHTML = '<div class="stock-row">Lỗi kết nối API.</div>'; }
+    const body = await response.json().catch(() => null);
+    if (!response.ok || !body || !body.accessToken) {
+      showLogin((body && (body.message || body.errorCode)) ||
+        'Đăng nhập thất bại (HTTP ' + response.status + ').');
+      return;
+    }
+    storeTokens(body.accessToken, body.refreshToken);
+    $('login-password').value = '';
+    showApp(body.user);
+    toast('Đã đăng nhập ' + username);
+    await loadOverview();
+  } catch {
+    showLogin('Không kết nối được API. Kiểm tra runtime-config.js.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function logout() {
+  /* Revoke server-side first, then drop the local copy. The bearer is sent so
+   * the host can revoke every session for this actor. */
+  if (accessToken || refreshToken) {
+    try {
+      await fetch(apiUrl('/api/auth/logout'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}),
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch { /* the local session is dropped regardless */ }
+  }
+  forgetTokens();
+  renderAll(true);
+  showLogin('Đã đăng xuất.');
+  toast('Đã đăng xuất');
+}
+
+/* ------------------------------------------------------------------- boot */
+
+function setupNav() {
+  const titles = {
+    'tab-overview': 'Tổng quan vận hành',
+    'tab-stock': 'Kho & Tồn kho',
+    'tab-mfg': 'Sản xuất',
+    'tab-lots': 'Nhận hàng & Lots',
+    'tab-incident': 'Giám sát & Sự cố',
+  };
+  const select = (button) => {
+    document.querySelectorAll('.nav-item').forEach((x) => x.classList.toggle('active', x === button));
+    document.querySelectorAll('.tab-pane').forEach((p) => p.classList.toggle('active', p.id === button.dataset.tab));
+    $('page-title').textContent = titles[button.dataset.tab] || '';
+    $('breadcrumb-tab').textContent = titles[button.dataset.tab] || '';
+  };
+  document.querySelectorAll('.nav-item').forEach((b) => b.addEventListener('click', () => select(b)));
+  document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => {
+    document.querySelector('[data-tab="' + b.dataset.goto + '"]')?.click();
+  }));
+  $('theme-toggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    $('theme-toggle').textContent = next === 'dark' ? '○ Chế độ sáng' : '◐ Chế độ tối';
+  });
+}
+
+async function boot() {
+  if (!accessToken) {
+    showLogin();
+    return;
+  }
+  const { ok, body } = await apiJson('/api/auth/me');
+  if (!ok || !body) {
+    showLogin();
+    return;
+  }
+  showApp({ username: body.username, roles: body.roles });
+  await loadOverview();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  setupNav(); renderLowStock(); loadStock(); checkApi();
-  document.querySelector('[data-tab="tab-overview"]')?.click();
-  $('btn-check-api').addEventListener('click', checkApi);
-  $('btn-login').addEventListener('click', login);
-  $('btn-logout').addEventListener('click', logout);
-  $('auth-password').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
-  updateAuthStatus();
+  setupNav();
+  renderAll();
+  $('login-form').addEventListener('submit', (e) => { e.preventDefault(); login(); });
+  $('logout-btn').addEventListener('click', logout);
+  $('btn-reload').addEventListener('click', loadOverview);
+  $('warehouse-select').addEventListener('change', loadStock);
+  $('stock-search').addEventListener('input', () => renderStock());
+  $('btn-reload-stock').addEventListener('click', loadAllStock);
+  $('btn-load-po').addEventListener('click', loadProductionOrder);
+  $('po-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); loadProductionOrder(); }
+  });
+  $('btn-check-material').addEventListener('click', () => runProductionAction('check'));
+  $('btn-complete-po').addEventListener('click', () => runProductionAction('complete'));
+  $('stock-form').addEventListener('submit', submitStock);
   $('lot-form').addEventListener('submit', submitLotReceive);
   $('move-form').addEventListener('submit', submitLotMove);
   $('btn-resolve').addEventListener('click', resolveScan);
-  // Scanner-first: Enter in the lot field resolves immediately.
   $('m-lot').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); resolveScan(); }
   });
-  $('warehouse-select').addEventListener('change', loadStock);
-  $('stock-search').addEventListener('input', loadStock);
-  $('btn-reload-stock').addEventListener('click', loadStock);
-  $('btn-open-in').addEventListener('click', () => { $('s-type').value = 'in'; document.querySelector('[data-tab="tab-stock"]').click(); });
-  $('btn-open-out').addEventListener('click', () => { $('s-type').value = 'out'; document.querySelector('[data-tab="tab-stock"]').click(); });
-  $('stock-form').addEventListener('submit', submitStock);
-  $('btn-check-material').addEventListener('click', () => completePo(true));
-  $('btn-complete-po').addEventListener('click', () => completePo(false));
   $('alloc-form').addEventListener('submit', loadAllocation);
   $('trace-form').addEventListener('submit', lookupTrace);
   $('label-form').addEventListener('submit', printLabel);
+  boot();
 });

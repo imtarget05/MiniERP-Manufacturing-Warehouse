@@ -16,7 +16,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -37,7 +42,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/auth/login": {
@@ -140,7 +150,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/automation/production-order/{poNo}/material-check": {
@@ -164,7 +179,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/automation/production-order/{poNo}/reserve": {
@@ -188,7 +208,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/automation/production-order/{poNo}/release": {
@@ -212,7 +237,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/automation/production-order/{poNo}/complete": {
@@ -236,7 +266,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/automation/replenishment/evaluate": {
@@ -259,7 +294,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/automation/replenishment/sweep": {
@@ -272,7 +312,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/automation/replenishment/alerts": {
@@ -328,7 +373,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/automation/stale-orders": {
@@ -394,7 +444,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/automation/reports": {
@@ -498,7 +553,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       },
       "get": {
         "tags": [
@@ -551,7 +611,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       },
       "get": {
         "tags": [
@@ -615,7 +680,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/automation/stock/adjust": {
@@ -638,7 +708,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/support/errors": {
@@ -693,7 +768,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/support/change-requests/{crNo}": {
@@ -740,7 +820,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/integration/helpdesk/deliveries/{externalRef}": {
@@ -764,7 +849,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/labels": {
@@ -787,7 +877,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       },
       "get": {
         "tags": [
@@ -889,7 +984,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/manufacturing/production-order": {
@@ -912,7 +1012,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/manufacturing/production-order/{poNo}": {
@@ -977,7 +1082,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/manufacturing/production-order/{poNo}/cancel": {
@@ -1001,7 +1111,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/manufacturing/production-order/{poNo}/allocate-lots": {
@@ -1059,7 +1174,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/manufacturing/production-order/{poNo}/complete-traceable": {
@@ -1093,7 +1213,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/procurement/purchase-order": {
@@ -1116,7 +1241,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/procurement/purchase-order/{poNo}/receive": {
@@ -1140,7 +1270,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/health": {
@@ -1175,6 +1310,24 @@
           "Support"
         ],
         "operationId": "HealthDetails",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Support"
+        ],
+        "operationId": "PrometheusMetrics",
         "responses": {
           "200": {
             "description": "Success"
@@ -1288,7 +1441,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/stock/out": {
@@ -1318,7 +1476,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/warehouse/{warehouseCode}/locations": {
@@ -1374,7 +1537,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/warehouse/lots/{lotCode}": {
@@ -1456,7 +1624,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/warehouse/putaway": {
@@ -1479,7 +1652,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/warehouse/move": {
@@ -1502,7 +1680,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/warehouse/lots/{lotCode}/hold": {
@@ -1526,7 +1709,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/warehouse/lots/{lotCode}/release-hold": {
@@ -1550,7 +1738,12 @@
           "200": {
             "description": "Success"
           }
-        }
+        },
+        "security": [
+          {
+            "BearerAuth": [ ]
+          }
+        ]
       }
     },
     "/api/barcodes/resolve/{code}": {
@@ -2206,6 +2399,14 @@
           }
         },
         "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "description": "Access token issued by POST /api/auth/login.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
       }
     }
   }

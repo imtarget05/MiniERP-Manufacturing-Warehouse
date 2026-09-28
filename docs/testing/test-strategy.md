@@ -71,8 +71,15 @@ flowchart TD
 export PATH="$HOME/.dotnet:$PATH"
 dotnet test tests/MiniERP.Api.Tests --filter "Category!=Integration"
 
-# 2. Run Full Test Suite (Requires active Oracle container)
-bash scripts/start-db.sh && bash scripts/run-sql.sh
+# 2. Run Full Test Suite (Requires active Oracle container).
+#    run-sql.sh is destructive-capable, so it is gated: scripts/qa-gate.sh must
+#    first PROVE the target identity is a throwaway (refusal = exit 78, nothing
+#    contacted). See docs/operations/backup-restore.md.
+MINIERP_QA_INSTANCE=minierp-qa bash scripts/start-db.sh
+MINIERP_QA_DISPOSABLE=1 MINIERP_QA_INSTANCE=minierp-qa \
+DB_CONTAINER=minierp-qa-oracle APP_USER=erp_user \
+QA_DB_VOLUME=minierp-qa_oracle_data QA_DB_PROJECT=minierp-qa \
+  bash scripts/run-sql.sh
 dotnet test tests/MiniERP.Api.Tests
 
 # 3. Run Full 7-Stage Acceptance Pipeline

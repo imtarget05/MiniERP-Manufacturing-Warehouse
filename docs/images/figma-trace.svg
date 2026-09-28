@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" font-family="sans-serif">
+<rect width="1200" height="700" fill="#f4f4f5"/>
+<rect x="0" y="0" width="1200" height="56" fill="#1f2937"/>
+<text x="20" y="36" fill="#fff" font-size="20">MiniERP — Traceability / Recall (wireframe, FR-004)</text>
+<rect x="20" y="76" width="1160" height="70" fill="#fff" stroke="#d1d5db"/>
+<text x="34" y="102" font-size="14">Lot thành phẩm / barcode:</text>
+<rect x="280" y="84" width="420" height="36" fill="#f9fafb" stroke="#9ca3af"/>
+<text x="292" y="107" font-size="14">FG_RUNNER_PRO_42-LOT88</text>
+<rect x="710" y="84" width="130" height="36" fill="#1f2937"/>
+<text x="736" y="107" fill="#fff" font-size="14">Trace</text>
+<text x="850" y="107" font-size="13" fill="#059669">render 85ms ✔ (target &lt; 60s)</text>
+<text x="180" y="200" font-size="15" font-weight="bold">FG_RUNNER_PRO_42 — LOT88 (30 đôi)</text>
+<rect x="150" y="214" width="260" height="60" fill="#dbeafe" stroke="#2563eb"/>
+<text x="165" y="238" font-size="13">FG lot LOT88</text>
+<text x="165" y="258" font-size="12" fill="#6b7280">30 đôi — COMPLETED</text>
+<line x1="280" y1="274" x2="180" y2="330" stroke="#9ca3af" stroke-width="2"/>
+<line x1="280" y1="274" x2="380" y2="330" stroke="#9ca3af" stroke-width="2"/>
+<rect x="60" y="330" width="240" height="60" fill="#fef3c7" stroke="#d97706"/>
+<text x="75" y="354" font-size="13">WIP đế (SOLE-WIP-11)</text>
+<text x="75" y="374" font-size="12" fill="#6b7280">15m mesh + 30 đế</text>
+<rect x="320" y="330" width="240" height="60" fill="#fef3c7" stroke="#d97706"/>
+<text x="335" y="354" font-size="13">WIP thân (UPPER-WIP-07)</text>
+<text x="335" y="374" font-size="12" fill="#6b7280">chỉ + keo</text>
+<line x1="180" y1="390" x2="130" y2="446" stroke="#9ca3af" stroke-width="2"/>
+<line x1="180" y1="390" x2="250" y2="446" stroke="#9ca3af" stroke-width="2"/>
+<rect x="40" y="446" width="180" height="56" fill="#fee2e2" stroke="#dc2626"/>
+<text x="55" y="468" font-size="12">RM001 keo ⚠ HOLD</text>
+<text x="55" y="488" font-size="11" fill="#6b7280">lô lỗi — đã hold</text>
+<rect x="230" y="446" width="180" height="56" fill="#fff" stroke="#059669"/>
+<text x="245" y="468" font-size="12">RM002 đế ✔</text>
+<text x="245" y="488" font-size="11" fill="#6b7280">ACTIVE</text>
+<rect x="700" y="330" width="460" height="280" fill="#fff" stroke="#d1d5db"/>
+<text x="714" y="356" font-size="15" font-weight="bold">Hành động QA</text>
+<rect x="714" y="370" width="200" height="36" fill="#fff" stroke="#dc2626"/>
+<text x="734" y="393" font-size="13" fill="#dc2626">POST lots/{lot}/hold</text>
+<rect x="924" y="370" width="200" height="36" fill="#fff" stroke="#059669"/>
+<text x="936" y="393" font-size="13" fill="#059669">…/release-hold</text>
+<text x="714" y="430" font-size="13">GET /barcodes/resolve/{code} → lot</text>
+<text x="714" y="456" font-size="13">GET /trace/{lotCode} → cây 3 tầng</text>
+<rect x="714" y="480" width="432" height="100" fill="#f9fafb" stroke="#e5e7eb"/>
+<text x="726" y="504" font-size="12" fill="#6b7280">Incident tự mở khi hold: SUPPORT_INCIDENT</text>
+<text x="726" y="528" font-size="12" fill="#6b7280">+ webhook → Helpdesk (fail-soft, retry 3).</text>
+<text x="726" y="552" font-size="12" fill="#6b7280">UAT-REP-001: full cây &lt; 85ms.</text>
+<text x="20" y="660" font-size="12" fill="#6b7280">Pain solved: trước truy giấy 2 ngày → nay 85ms. Flow chi tiết: docs/user-journey.md (J3).</text>
+</svg>

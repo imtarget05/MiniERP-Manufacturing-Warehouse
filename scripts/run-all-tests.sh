@@ -16,10 +16,119 @@
 #          SKIP_DOCKER=1 bash scripts/run-all-tests.sh   (container already up)
 #          KEEP_API=1    bash scripts/run-all-tests.sh   (leave the API running)
 # EXIT:    0 only when every stage passed
+#
+# QA GATE: stages 3, 6 and 7 call test-incident.sh / test-api.sh /
+#          test-traceability.sh, all of which WRITE. scripts/qa-gate.sh refuses
+#          them unless the target is named and the operator has declared it a
+#          disposable, because test-api.sh used to default to
+#          http://localhost:5000 - which in a shared workspace is a real system.
+#          This runner creates and owns its own database (stage 1/2), so it
+#          asserts the disposable acknowledgement for its own target - see
+#          MINIERP_QA_DISPOSABLE below. It never sets MINIERP_QA_LIVE_SMOKE.
+#
+# TEST DSN: stage 5 runs `dotnet test`, and the test host is fail-closed -
+#          tests/MiniERP.Api.Tests/TestOracleDsnGuard.cs refuses to build unless
+#          the RUN grants a data source through the environment, because
+#          src/appsettings.json points at a real Oracle listener and the suite
+#          writes a row on every POST. So this runner exports
+#          ConnectionStrings__OracleDb itself (export_test_dsn) naming the
+#          database it just created. It never uses the ambient opt-in
+#          MINIERP_TEST_ALLOW_AMBIENT_DB, which is exactly the path that would
+#          let a test run inherit appsettings.json's target. This is also the
+#          DSN CI job "2. Full Acceptance Pipeline" runs dotnet test with: the
+#          workflow does not carry a password, the runner derives one from the
+#          container it started. See .github/workflows/ci.yml.
 # ============================================================================
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Operator-supplied targets, captured before lib.sh substitutes its defaults, so
+# the gate can tell "the caller said so" from "lib.sh guessed".
+QA_OWNED_BASE_URL="${BASE_URL:-}"
+QA_OWNED_DB_CONTAINER="${DB_CONTAINER:-}"
+QA_OWNED_APP_USER="${APP_USER:-}"
+
 source "$HERE/lib.sh"
+# shellcheck source=scripts/qa-gate.sh
+source "$HERE/qa-gate.sh"
+
+# This runner starts its own Oracle (stage 1) and its own API (stage 6), so it
+# is asserting ownership of a target it created, not borrowing someone else's.
+# Declaring it here is what makes stages 3/6/7 runnable; deleting these three
+# lines makes those stages REFUSE (exit 78) instead of guessing a target.
+export MINIERP_QA_DISPOSABLE=1
+# Identity, not just an acknowledgement: scripts/qa-gate.sh REFUSES
+# MINIERP_QA_DISPOSABLE=1 when DB_CONTAINER is minierp-oracle, when the volume
+# is 04-minierp-manufacturing-warehouse_oracle_data, or when the compose project
+# is 04-minierp-manufacturing-warehouse - the names docker-compose.yml uses by
+# default, which are the same ones the shared production stack uses. So this
+# runner pins a QA identity, and start-db.sh brings the stack up under it via
+# docker-compose.qa.yml. The API port may stay 5000: the gate accepts a
+# production-shaped port when the database identity is QA-marked and
+# MINIERP_QA_INSTANCE is set.
+export MINIERP_QA_INSTANCE="${MINIERP_QA_INSTANCE:-minierp-qa}"
+export QA_CONTAINER_NAME="${QA_CONTAINER_NAME:-minierp-qa-oracle}"
+export QA_DB_PROJECT="$MINIERP_QA_INSTANCE"
+export QA_DB_VOLUME="${MINIERP_QA_INSTANCE}_oracle_data"
+export DB_CONTAINER="$QA_CONTAINER_NAME"
+# The declaration above is EARNED only when this runner starts the database
+# itself (stage 1). With SKIP_DOCKER=1 the container is inherited from whoever
+# started it - which in a shared workspace may be a real system named
+# minierp-oracle. Say so out loud, because the gate cannot tell the difference:
+# a self-declared acknowledgement is not evidence.
+if [ "${SKIP_DOCKER:-0}" = "1" ]; then
+  printf '%b\n' "${C_Y}WARN SKIP_DOCKER=1: this run did NOT create $DB_CONTAINER; it is asserting a disposable over a database it inherited.${C_0}"
+  printf '%b\n' "     Confirm it is a throwaway before stages 3/6/7 write to it." >&2
+fi
+# An operator-supplied DB_CONTAINER wins, but it then has to BE a QA identity
+# or the gate will refuse stages 3/6/7 - which is the intended behaviour.
+if [ -n "$QA_OWNED_DB_CONTAINER" ]; then DB_CONTAINER="$QA_OWNED_DB_CONTAINER"; fi
+export DB_CONTAINER
+APP_USER="${QA_OWNED_APP_USER:-$APP_USER}";              export APP_USER
+BASE_URL="${QA_OWNED_BASE_URL:-$BASE_URL}";              export BASE_URL
+
+# Grants the .NET test host its data source, explicitly, for stage 5.
+#
+# Why the runner has to do this: TestOracleDsnGuard is fail-closed, so a
+# `dotnet test` with no ConnectionStrings__OracleDb in the environment dies in
+# fixture construction (it would otherwise fall back to src/appsettings.json).
+# The value is built from the same APP_USER / APP_USER_PWD / PDB that stage 1
+# handed to the container, and the host port is ASKED OF the container rather
+# than hardcoded, so a remapped port cannot silently point the integration
+# tests somewhere else.
+#
+# Three deliberate properties:
+#   1. it always overwrites an inherited DSN - this runner created the database,
+#      so the tests may only ever see this run's throwaway;
+#   2. it clears MINIERP_TEST_ALLOW_AMBIENT_DB, so the grant below is the only
+#      thing standing between the suite and a connection;
+#   3. it prints the DSN shape with the password omitted - enough for a reviewer
+#      to see the target, not enough to leak the credential into CI logs.
+export_test_dsn() {
+  local host port mapping dsn
+  host="${TEST_DSN_HOST:-127.0.0.1}"
+  port="${TEST_DSN_PORT:-}"
+  if [ -z "$port" ]; then
+    # PDB_PORT is the CONTAINER port Oracle listens on, which
+    # docker-compose.yml publishes as 1521:1521. The host port it is published
+    # on is read back from the container below, so changing the mapping needs no
+    # edit here - only changing the listener port does.
+    mapping="$(docker port "$DB_CONTAINER" "${PDB_PORT:-1521}/tcp" 2>/dev/null | head -1)"
+    port="${mapping##*:}"
+    if [ -z "$port" ] || [ "$port" = "$mapping" ] || [ -z "$mapping" ]; then
+      err "cannot resolve the published Oracle port for '$DB_CONTAINER' (docker port: ${mapping:-<none>}); refusing to guess a data source"
+      return 1
+    fi
+  fi
+  dsn="User Id=${APP_USER};Password=${APP_USER_PWD};Data Source=${host}:${port}/${PDB};Pooling=true;Min Pool Size=1;"
+  if [ -n "${ConnectionStrings__OracleDb:-}" ] && [ "${ConnectionStrings__OracleDb}" != "$dsn" ]; then
+    warn "replacing an inherited ConnectionStrings__OracleDb; stage 5 only ever runs against the disposable this runner created"
+  fi
+  export ConnectionStrings__OracleDb="$dsn"
+  unset MINIERP_TEST_ALLOW_AMBIENT_DB
+  ok "test data source granted explicitly: User Id=$APP_USER;Data Source=$host:$port/$PDB (password redacted; container $DB_CONTAINER)"
+  return 0
+}
 
 STAGES=""
 FAILED_STAGES=""
@@ -63,6 +172,8 @@ fi
 stage "2/9 load schema + package + seed data" bash "$HERE/run-sql.sh" || true
 
 # ----------------------------------------------------------------- 3 incident
+# test-incident.sh needs no base URL: it is authorised on the database target,
+# which this runner owns (see the QA GATE note in the header).
 stage "3/9 verify the PO001 incident scenario (PL/SQL)" bash "$HERE/test-incident.sh" || true
 
 # -------------------------------------------------------------- 4 build .NET
@@ -89,6 +200,10 @@ stage "4/9 dotnet restore + build (Release, warnings as errors)" run_build || tr
 # ------------------------------------------------------------------ 5 dotnet test
 run_dotnet_test() {
   find_dotnet || { err ".NET SDK 8 not found"; return 1; }
+  # Fail closed: no granted DSN, no test run. Without this the guarded fixtures
+  # abort (correctly) with a wall of identical refusals that reads like a broken
+  # test suite instead of a missing variable.
+  export_test_dsn || return 1
   cd "$REPO_ROOT/tests/MiniERP.Api.Tests" || return 1
   local out; out="$(mktemp)"
   dotnet test --nologo -c Release > "$out" 2>&1
@@ -98,7 +213,7 @@ run_dotnet_test() {
   rm -f "$out"
   return $rc
 }
-stage "5/9 dotnet test (unit + integration)" run_dotnet_test || true
+stage "5/9 dotnet test (unit + integration, explicit disposable DSN)" run_dotnet_test || true
 
 # -------------------------------------------------------- 6 API smoke test
 run_api_smoke() {

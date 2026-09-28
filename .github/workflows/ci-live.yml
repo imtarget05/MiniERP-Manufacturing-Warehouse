@@ -1,0 +1,56 @@
+# =============================================================================
+# CI Live — MiniERP Oracle-gated acceptance (MANUAL ONLY)
+#
+# Trigger: Actions → "CI Live — Acceptance" → Run workflow (workflow_dispatch).
+# NEVER runs on push/PR: it wraps scripts/run-all-tests.sh (9 stages), which
+# starts a disposable Oracle container, loads schema/seed, runs unit +
+# integration tests against the LIVE database, boots the API, runs the
+# traceability E2E, and exports artifacts/swagger.json.
+#
+# Requirements (documented, not assumed):
+#   - Docker daemon with ~8 GB free (Oracle XE image pull on first run)
+#   - Time: 10+ minutes end-to-end; Oracle startup alone is minutes
+#   - This workflow creates and owns its disposable DB (qa-gate
+#     MINIERP_QA_DISPOSABLE=1 inside the script); it never touches
+#     src/appsettings.json and never sets MINIERP_TEST_ALLOW_AMBIENT_DB.
+#
+# Local equivalent:
+#   bash scripts/run-all-tests.sh
+# =============================================================================
+name: CI Live — Acceptance (manual, needs Oracle)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-live-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance-live:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Make Scripts Executable
+        run: chmod +x scripts/*.sh
+
+      - name: Run Full Acceptance Pipeline (9 stages, needs Oracle + time)
+        run: bash scripts/run-all-tests.sh
+
+      - name: Archive Test & Execution Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-live-artifacts
+          path: artifacts/
+          retention-days: 7

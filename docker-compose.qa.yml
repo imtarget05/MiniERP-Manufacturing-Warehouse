@@ -1,0 +1,25 @@
+# ============================================================================
+# PROJECT: MiniERP-Manufacturing-Warehouse (no numeric prefix)
+# FILE:    docker-compose.qa.yml
+# PURPOSE: identity override that makes a THROWAWAY stack recognisable to
+#          scripts/qa-gate.sh.
+#
+# WHY: docker-compose.yml hardcodes container_name: minierp-oracle - the same
+#      name the shared production container uses. A disposable that calls
+#      itself minierp-oracle cannot be told apart from production by its
+#      identity, and the gate (rightly) refuses to treat minierp-oracle as a
+#      throwaway under any flag. So the QA profile renames the database
+#      container and, via `-p <project>`, the volume.
+#
+#      The ports are NOT remapped on purpose: the API may stay on 5000 because
+#      scripts/qa-gate.sh accepts a production-shaped PORT when the database
+#      identity is QA-marked and MINIERP_QA_INSTANCE is set. The absolute rules
+#      are the container, volume and compose-project NAMES.
+#
+# USAGE:   MINIERP_QA_INSTANCE=minierp-qa \
+#            docker compose -p minierp-qa -f docker-compose.yml -f docker-compose.qa.yml up -d
+#          scripts/start-db.sh does this for you when MINIERP_QA_INSTANCE is set.
+# ============================================================================
+services:
+  oracle-db:
+    container_name: ${QA_CONTAINER_NAME:-minierp-qa-oracle}

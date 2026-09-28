@@ -1,0 +1,10 @@
+# Session log 2026-09-27 — MiniERP property + oracle-free (observed output, key lines)
+
+In `tests/MiniERP.Api.Tests/` (net8.0):
+1. `dotnet test --filter "FullyQualifiedName~TraceabilityProperty" --nologo -v q`
+   → `Passed! - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 534 ms`
+2. `dotnet test --filter "Category!=Integration" --nologo -v q` (Duration: 40 s)
+   → sample: `MiniERP.Api.Tests.TestOracleDsnGuardTests.GuardedFactory_WithGrantedDsn_StartsAndServesTheRealPipeline [FAIL]`
+   → `Failed! - Failed: 26, Passed: 224, Skipped: 0, Total: 250`
+   All 26 failures throw in `TestOracleDsn.Ensure` (pre-existing Oracle-guard fail-closed).
+Verdict: 3/3 VERIFIED; 224/26 reproduces HARD_TEST_REPORT.md §VIII exactly → DEF-ERP-002.

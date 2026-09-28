@@ -318,6 +318,11 @@ BEGIN
                         'BOM_FORCE_SAVE', 'STOCK_OVERRIDE')),
         REF_NO       VARCHAR2(50),
         PAYLOAD      VARCHAR2(2000),
+        -- B-03: the canonical adjustment this token authorises, built by
+        -- ERP_AUTOMATION.approval_scope as 'WAREHOUSE|ITEM|DELTA'. A token may
+        -- only execute exactly that adjustment, so the control lives in the
+        -- schema and not only in the service.
+        APPROVED_SCOPE VARCHAR2(120),
         STATUS       VARCHAR2(15) DEFAULT 'PENDING' NOT NULL
                      CONSTRAINT CK_APV_STATUS CHECK (STATUS IN
                        ('PENDING', 'APPROVED', 'REJECTED', 'EXPIRED', 'EXECUTED')),
@@ -327,6 +332,153 @@ BEGIN
         CREATED_AT   DATE DEFAULT SYSDATE NOT NULL
       )]';
   END IF;
+END;
+/
+
+-- 5.8.1 Approval-gate constraints, idempotent and safe on a populated table.
+--     A schema created before round 4 (no APPROVED_SCOPE column, or the old
+--     scope regex) must be upgraded in place, so this section does not live
+--     inside the "create if missing" block above and can be rerun without
+--     ORA-01430. It is also the only definition site for the three checks.
+--       CK_APV_SCOPE_REQUIRED    an INVENTORY_ADJUST token always names its scope
+--       CK_APV_SCOPE_FORMAT      WAREHOUSE|ITEM|DELTA, 3 decimals, non-zero
+--       CK_APV_APPROVER_DIFFERS  B-02 two-person rule, upper-cased and trimmed,
+--                                i.e. exactly the rule decide_approval applies,
+--                                so the backstop is never weaker than the guard
+--     A CHECK can only be redefined by dropping it, and CK_APV_SCOPE_FORMAT
+--     changed in round 4, so all three are dropped then re-added.
+--
+--     MIGRATION POLICY (round 5) - chosen because a validated add is the
+--     failure mode a legacy schema actually hits:
+--       1. The three checks are added ENABLE NOVALIDATE. Oracle never validates
+--          the rows that already exist, so the migration cannot fail with
+--          ORA-02293 and cannot stop half way with the column added and the
+--          constraints missing. NOVALIDATE still enforces the predicate on
+--          every INSERT and every UPDATE from that moment on, so no new write
+--          can ever introduce a row the control would have rejected.
+--       2. Each check is then upgraded to ENABLE VALIDATE and the ORA-02293
+--          is caught. A fresh install, and any upgrade whose legacy rows all
+--          satisfy the rule, ends up fully VALIDATED (the strongest state); the
+--          degrade to NOT VALIDATED happens only when grandfathering is
+--          genuinely required, and only for the single check that failed.
+--       3. APPROVED_SCOPE is NOT backfilled, deliberately. It did not exist
+--          when the legacy rows were written, so no scope was ever approved
+--          for them. Deriving one from PAYLOAD would invent an authorisation
+--          nobody granted and let a token that was meant to be re-raised move
+--          stock. A legacy token therefore keeps a NULL scope, which
+--          adjust_stock refuses (ORA-20010) before it touches any stock row,
+--          and decide_approval refuses (ORA-20011) before it can be promoted to
+--          APPROVED - the unbound token is inert, not merely unusual.
+--       4. REQUESTER/APPROVER are normalised to UPPER(TRIM(...)). That is
+--          lossless (same identity, canonical spelling), idempotent, and it is
+--          what both decide_approval and CK_APV_APPROVER_DIFFERS compare, so a
+--          legacy ' admin ' / 'ADMIN' row cannot slip past the rule. With
+--          NOVALIDATE it cannot make the migration fail either.
+--       5. The pre-flight below reports the legacy offenders instead of
+--          letting ORA-02293 name a constraint, so an operator can see what
+--          was grandfathered. It is informational: refusing to migrate is
+--          what leaves a schema half-upgraded.
+--     Two blocks on purpose. A single block would not compile on a legacy
+--     schema: the pre-flight below names APPROVED_SCOPE, and an anonymous block
+--     is compiled as a whole, so ORA-00904 would take the column-add with it and
+--     leave the table exactly as half-migrated as the round-4 proof could not
+--     see. (That is not hypothetical - it is what the first round-5 run did.)
+DECLARE
+  v_col NUMBER;
+BEGIN
+  -- 1. the column the new checks reference
+  SELECT COUNT(*) INTO v_col
+    FROM user_tab_columns
+   WHERE table_name = 'APPROVAL_REQUEST' AND column_name = 'APPROVED_SCOPE';
+  IF v_col = 0 THEN
+    EXECUTE IMMEDIATE
+      'ALTER TABLE APPROVAL_REQUEST ADD (APPROVED_SCOPE VARCHAR2(120))';
+    DBMS_OUTPUT.PUT_LINE('W5AR5_MIGRATION APPROVED_SCOPE = ADDED');
+  ELSE
+    DBMS_OUTPUT.PUT_LINE('W5AR5_MIGRATION APPROVED_SCOPE = ALREADY_PRESENT');
+  END IF;
+
+  -- 2. normalise the actors before the two-person check can compare them.
+  --    decide_approval compares UPPER(TRIM(...)); a legacy row written as
+  --    ' admin ' / 'ADMIN' must not be able to violate the normalised rule.
+  UPDATE APPROVAL_REQUEST
+     SET REQUESTER = UPPER(TRIM(REQUESTER))
+   WHERE REQUESTER IS NOT NULL AND REQUESTER <> UPPER(TRIM(REQUESTER));
+  UPDATE APPROVAL_REQUEST
+     SET APPROVER = UPPER(TRIM(APPROVER))
+   WHERE APPROVER IS NOT NULL AND APPROVER <> UPPER(TRIM(APPROVER));
+  COMMIT;
+END;
+/
+
+DECLARE
+  v_cnt  NUMBER;
+  v_rows NUMBER;
+  PROCEDURE drop_constraint(p_name VARCHAR2) IS
+  BEGIN
+    SELECT COUNT(*) INTO v_cnt FROM user_constraints
+     WHERE table_name = 'APPROVAL_REQUEST' AND constraint_name = p_name;
+    IF v_cnt > 0 THEN
+      EXECUTE IMMEDIATE 'ALTER TABLE APPROVAL_REQUEST DROP CONSTRAINT ' || p_name;
+    END IF;
+  END drop_constraint;
+
+  -- Add the check without ever looking at the existing rows, then try to
+  -- validate it. ORA-02293 means "legacy rows disagree", not "migration
+  -- failed": the constraint stays NOVALIDATE, which still governs all new DML.
+  PROCEDURE add_check(p_name VARCHAR2, p_check VARCHAR2) IS
+  BEGIN
+    drop_constraint(p_name);
+    EXECUTE IMMEDIATE
+      'ALTER TABLE APPROVAL_REQUEST ADD CONSTRAINT ' || p_name || ' CHECK (' ||
+      p_check || ') ENABLE NOVALIDATE';
+    BEGIN
+      EXECUTE IMMEDIATE
+        'ALTER TABLE APPROVAL_REQUEST ENABLE VALIDATE CONSTRAINT ' || p_name;
+      DBMS_OUTPUT.PUT_LINE('W5AR5_MIGRATION ' || p_name || ' = ENABLED+VALIDATED');
+    EXCEPTION
+      WHEN OTHERS THEN
+        IF SQLCODE = -2293 THEN
+          DBMS_OUTPUT.PUT_LINE('W5AR5_MIGRATION ' || p_name ||
+            ' = ENABLED+NOVALIDATE (legacy rows grandfathered, new DML still checked)');
+        ELSE
+          RAISE;
+        END IF;
+    END;
+  END add_check;
+BEGIN
+  -- 3. pre-flight: the legacy rows the checks would reject if they were
+  --    validated. Reported, never fatal (see policy note 5).
+  SELECT COUNT(*) INTO v_rows FROM APPROVAL_REQUEST
+   WHERE ACTION = 'INVENTORY_ADJUST' AND APPROVED_SCOPE IS NULL;
+  DBMS_OUTPUT.PUT_LINE('W5AR5_LEGACY unbound INVENTORY_ADJUST (no approved scope) = ' || v_rows);
+  IF v_rows > 0 THEN
+    FOR legacy_row IN (SELECT APPROVAL_NO, STATUS FROM APPROVAL_REQUEST
+                        WHERE ACTION = 'INVENTORY_ADJUST' AND APPROVED_SCOPE IS NULL
+                        ORDER BY APPROVAL_NO) LOOP
+      DBMS_OUTPUT.PUT_LINE('W5AR5_LEGACY   ' || legacy_row.APPROVAL_NO ||
+        ' status=' || legacy_row.STATUS);
+    END LOOP;
+  END IF;
+  SELECT COUNT(*) INTO v_rows FROM APPROVAL_REQUEST
+   WHERE REQUESTER IS NOT NULL AND APPROVER IS NOT NULL
+     AND UPPER(TRIM(APPROVER)) = UPPER(TRIM(REQUESTER));
+  DBMS_OUTPUT.PUT_LINE('W5AR5_LEGACY self-approved after normalisation = ' || v_rows);
+
+  -- 4. drop then (re)add ENABLE NOVALIDATE, then validate when the data allows.
+  add_check('CK_APV_SCOPE_REQUIRED',
+    q'[ACTION <> 'INVENTORY_ADJUST' OR APPROVED_SCOPE IS NOT NULL]');
+  -- WAREHOUSE|ITEM|DELTA with a signed 3-decimal number, and not zero. Oracle
+  -- regex has no lookahead, so "not zero" is the format plus the two spellings
+  -- the fill-mode picture can produce for zero.
+  add_check('CK_APV_SCOPE_FORMAT',
+    q'[APPROVED_SCOPE IS NULL OR
+       (REGEXP_LIKE(APPROVED_SCOPE, '^[A-Z0-9_.]+\|[A-Z0-9_.]+\|-?[0-9]+\.[0-9]{3}$')
+        AND INSTR(APPROVED_SCOPE, '|0.000') = 0
+        AND INSTR(APPROVED_SCOPE, '|-0.000') = 0)]');
+  add_check('CK_APV_APPROVER_DIFFERS',
+    q'[APPROVER IS NULL OR REQUESTER IS NULL
+       OR UPPER(TRIM(APPROVER)) <> UPPER(TRIM(REQUESTER))]');
 END;
 /
 

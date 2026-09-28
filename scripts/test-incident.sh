@@ -8,11 +8,35 @@
 #            3. receive_purchase_order(PO_PUR_901) fixes the shortage
 #            4. PO001 completes and becomes COMPLETED, FG stock +50
 #          The script is idempotent: the SQL file resets its own rows.
-# USAGE:   bash scripts/test-incident.sh
-# EXIT:    0 when every assertion in the SQL script reported PASS
+# USAGE:   MINIERP_QA_DISPOSABLE=1 DB_CONTAINER=<disposable> APP_USER=<user> \
+#            bash scripts/test-incident.sh
+#          ... --gate-check             print the authorised target, contact nothing
+#
+#          This script makes no API call, but it is not read-only: the SQL file
+#          completes a production order, receives a purchase order and closes a
+#          change request, so scripts/qa-gate.sh authorises the DATABASE target
+#          and requires DB_CONTAINER / APP_USER to be set explicitly rather than
+#          inherited from the lib.sh defaults, which point at the shared
+#          minierp-oracle / erp_user.
+# EXIT:    0 when every assertion in the SQL script reported PASS,
+#          78 = refused by scripts/qa-gate.sh (no login, no DML)
 # ============================================================================
 set -uo pipefail
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+QA_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Captured before lib.sh replaces the unset values with the shared defaults.
+DB_CONTAINER_IN="${DB_CONTAINER:-}"
+APP_USER_IN="${APP_USER:-}"
+QA_DB_VOLUME_IN="${QA_DB_VOLUME:-}"
+QA_DB_PROJECT_IN="${QA_DB_PROJECT:-}"
+
+source "$QA_HERE/lib.sh"
+# shellcheck source=scripts/qa-gate.sh
+source "$QA_HERE/qa-gate.sh"
+
+qa_gate_parse_args "test-incident.sh" "$@"
+# database only: no HTTP target to authorise
+qa_gate "test-incident.sh" "" 1 0 "$QA_GATE_MODE"
 
 rule
 printf '%b\n' "${C_B} ERP incident scenario: production order PO001${C_0}"

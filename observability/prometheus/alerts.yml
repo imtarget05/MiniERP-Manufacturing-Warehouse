@@ -1,0 +1,15 @@
+# Alert rules - standard PromQL only. The `services` group is generic;
+# the `gateway` group only exists in repos that vendor llm-gateway/.
+groups:
+
+  - name: services
+    interval: 15s
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service down: {{ $labels.job }}"
+          description: "Scrape target job={{ $labels.job }} (instance={{ $labels.instance }}) down for 2m."

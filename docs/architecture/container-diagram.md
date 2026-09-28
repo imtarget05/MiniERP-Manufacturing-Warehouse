@@ -39,7 +39,7 @@ flowchart TD
    - Nginx Alpine web server hosting static SPA assets (`index.html`, `app.js`, `styles.css`).
    - Serves warehouse operations UI, KPI overview, barcode scanning forms, and genealogy visualizer.
 2. **`minierp-api` (Port 5000):**
-   - ASP.NET Core 8 Minimal API hosting 57 route endpoints.
+   - ASP.NET Core 8 Minimal API hosting 62 route endpoints (measured 2026-09-26).
    - Executes authentication, token generation, PBKDF2 hashing, idempotency validation, and authorization middleware.
    - Communicates with Oracle Database using Dapper micro-ORM.
 3. **`minierp-oracle` (Port 1521):**

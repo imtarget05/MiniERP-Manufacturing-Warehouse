@@ -30,8 +30,16 @@ internal static class TestStockFixture
     private const decimal FgSeedIfMissing = 100m;
     private const decimal FgCap = 500m;
 
-    public static void Reset(HttpClient client) =>
+    /// <summary>
+    /// Restores the sql/03_seed.sql baseline. The guard runs first on purpose:
+    /// this method issues STOCK_IN / STOCK_OUT, so against an ambient (real)
+    /// schema it would *add inventory* instead of resetting a disposable one.
+    /// </summary>
+    public static void Reset(HttpClient client)
+    {
+        TestOracleDsn.Ensure(nameof(TestStockFixture));
         ResetAsync(client).GetAwaiter().GetResult();
+    }
 
     private static async Task ResetAsync(HttpClient client)
     {

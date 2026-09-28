@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -61,7 +62,11 @@ public sealed class HelpdeskIntegrationService
             {
                 using var message = new HttpRequestMessage(HttpMethod.Post,
                     new Uri(baseUri, _options.IncidentPath.TrimStart('/')));
-                message.Headers.Add("X-Integration-Key", _options.IntegrationKey);
+                // The receiver parses `Authorization: Bearer <integration key>` and
+                // 401s every other shape, so the legacy X-Integration-Key header
+                // must not be sent alongside it.
+                message.Headers.Authorization =
+                    new AuthenticationHeaderValue("Bearer", _options.IntegrationKey);
                 message.Headers.Add("Idempotency-Key", request.ExternalRef);
                 message.Content = new StringContent(payload, Encoding.UTF8, "application/json");
                 using var response = await _http.SendAsync(message);

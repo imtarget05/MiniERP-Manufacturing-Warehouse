@@ -207,6 +207,73 @@ CREATE OR REPLACE PACKAGE BODY ERP_AUTOMATION AS
   -- upsert_alert: keep exactly one OPEN alert per (item, warehouse).
   -- Reopens/refreshes while available < reorder point, closes on recovery.
   -----------------------------------------------------------------------------
+  -- B-03 / round 4: the canonical adjustment an INVENTORY_ADJUST token
+  -- authorises. Both request_approval and adjust_stock build it with this
+  -- function, so the two call sites cannot drift:
+  --     <WAREHOUSE_CODE>|<ITEM_CODE>|<DELTA with exactly 3 decimals>
+  -- The number must be DETERMINISTIC, which rules out a bare TO_CHAR:
+  --   * TO_CHAR(n) with no format model follows session NLS, so 0.5 renders as
+  --     '|.5' in one session and '|,5' in another (measured: w5ar4-tochar-defect.log);
+  --   * a format model without FM pads with a leading blank.
+  -- So: FM (fill mode, no padding), an explicit 3-decimal picture, and an
+  -- explicit NLS parameter so the decimal separator cannot follow the session.
+  -- The contract is canonical at 3 decimals; every seeded quantity and delta in
+  -- this project is integral or 2-decimal, so the 3-decimal canonicalisation is
+  -- lossless for the domain.
+  FUNCTION approval_scope (
+    p_wh_code   IN VARCHAR2,
+    p_item_code IN VARCHAR2,
+    p_delta     IN NUMBER
+  ) RETURN VARCHAR2 IS
+  BEGIN
+    RETURN UPPER(TRIM(p_wh_code)) || '|' || UPPER(TRIM(p_item_code)) || '|' ||
+           TO_CHAR(TRUNC(p_delta, 3),
+                   'FM999999999999990.000',
+                   'NLS_NUMERIC_CHARACTERS=''.,''');
+  END approval_scope;
+
+  -- Validates the canonical INVENTORY_ADJUST payload contract and returns the
+  -- scope. Anything else (free text, a missing member, a zero delta, invalid
+  -- JSON) is refused here, so an unbound token can never be created.
+  FUNCTION require_inventory_adjust_scope (p_payload IN VARCHAR2) RETURN VARCHAR2 IS
+    v_wh    VARCHAR2(200);
+    v_item  VARCHAR2(200);
+    v_delta NUMBER;
+  BEGIN
+    IF p_payload IS NULL OR LENGTH(TRIM(p_payload)) = 0 THEN
+      RAISE_APPLICATION_ERROR(-20012,
+        'INVENTORY_ADJUST approval requires a payload with warehouseCode, itemCode and quantityDelta.');
+    END IF;
+    IF p_payload NOT LIKE '{%}%' OR NOT JSON_EXISTS(p_payload, '$.warehouseCode')
+       OR NOT JSON_EXISTS(p_payload, '$.itemCode')
+       OR NOT JSON_EXISTS(p_payload, '$.quantityDelta') THEN
+      RAISE_APPLICATION_ERROR(-20012,
+        'INVENTORY_ADJUST payload must be a JSON object with exactly the members ' ||
+        'warehouseCode, itemCode and quantityDelta; got: ' || SUBSTR(p_payload, 1, 200));
+    END IF;
+
+    v_wh := JSON_VALUE(p_payload, '$.warehouseCode' RETURNING VARCHAR2(50));
+    v_item := JSON_VALUE(p_payload, '$.itemCode' RETURNING VARCHAR2(50));
+    v_delta := JSON_VALUE(p_payload, '$.quantityDelta' RETURNING NUMBER);
+
+    IF v_wh IS NULL OR LENGTH(TRIM(v_wh)) = 0
+       OR v_item IS NULL OR LENGTH(TRIM(v_item)) = 0 THEN
+      RAISE_APPLICATION_ERROR(-20012,
+        'INVENTORY_ADJUST payload must name a warehouseCode and an itemCode; got: ' ||
+        SUBSTR(p_payload, 1, 200));
+    END IF;
+    IF v_delta IS NULL OR v_delta = 0 THEN
+      RAISE_APPLICATION_ERROR(-20012,
+        'INVENTORY_ADJUST payload must carry a non-zero quantityDelta; got: ' ||
+        SUBSTR(p_payload, 1, 200));
+    END IF;
+    IF LENGTH(approval_scope(v_wh, v_item, v_delta)) > 120 THEN
+      RAISE_APPLICATION_ERROR(-20012,
+        'INVENTORY_ADJUST payload exceeds the 120-character approved scope.');
+    END IF;
+    RETURN approval_scope(v_wh, v_item, v_delta);
+  END require_inventory_adjust_scope;
+
   PROCEDURE upsert_alert (
     p_item_id       IN NUMBER,
     p_warehouse_id  IN NUMBER,
@@ -979,6 +1046,7 @@ CREATE OR REPLACE PACKAGE BODY ERP_AUTOMATION AS
   ) IS
     v_started DATE := SYSDATE;
     v_dup     NUMBER;
+    v_scope   VARCHAR2(120);
   BEGIN
     IF p_approval_no IS NULL OR LENGTH(TRIM(p_approval_no)) = 0 THEN
       RAISE_APPLICATION_ERROR(-20012, 'Approval number must not be empty.');
@@ -995,10 +1063,16 @@ CREATE OR REPLACE PACKAGE BODY ERP_AUTOMATION AS
         'Approval ' || p_approval_no || ' already exists.');
     END IF;
 
+    -- B-03: an INVENTORY_ADJUST token is only meaningful when it names the one
+    -- adjustment it authorises.
+    IF p_action = 'INVENTORY_ADJUST' THEN
+      v_scope := require_inventory_adjust_scope(p_payload);
+    END IF;
+
     INSERT INTO APPROVAL_REQUEST
-      (APPROVAL_NO, ACTION, REF_NO, PAYLOAD, STATUS, REQUESTER)
+      (APPROVAL_NO, ACTION, REF_NO, PAYLOAD, APPROVED_SCOPE, STATUS, REQUESTER)
     VALUES
-      (p_approval_no, p_action, p_ref_no, p_payload, 'PENDING', p_requester);
+      (p_approval_no, p_action, p_ref_no, p_payload, v_scope, 'PENDING', p_requester);
     COMMIT;
 
     write_run('APPROVAL_REQUEST', 'MANUAL', p_approval_no, 'SUCCESS', v_started,
@@ -1020,8 +1094,11 @@ CREATE OR REPLACE PACKAGE BODY ERP_AUTOMATION AS
     p_decision    IN VARCHAR2,
     p_approver    IN VARCHAR2 DEFAULT 'system'
   ) IS
-    v_started DATE := SYSDATE;
-    v_status  VARCHAR2(20);
+    v_started   DATE := SYSDATE;
+    v_status    VARCHAR2(20);
+    v_requester VARCHAR2(50);
+    v_action    VARCHAR2(40);
+    v_scope     VARCHAR2(120);
   BEGIN
     IF p_decision NOT IN ('APPROVED', 'REJECTED') THEN
       RAISE_APPLICATION_ERROR(-20012,
@@ -1030,7 +1107,8 @@ CREATE OR REPLACE PACKAGE BODY ERP_AUTOMATION AS
     END IF;
 
     BEGIN
-      SELECT STATUS INTO v_status
+      SELECT STATUS, REQUESTER, ACTION, APPROVED_SCOPE
+        INTO v_status, v_requester, v_action, v_scope
         FROM APPROVAL_REQUEST
        WHERE APPROVAL_NO = p_approval_no
        FOR UPDATE;
@@ -1039,6 +1117,31 @@ CREATE OR REPLACE PACKAGE BODY ERP_AUTOMATION AS
         RAISE_APPLICATION_ERROR(-20002,
           'Approval ' || p_approval_no || ' not found.');
     END;
+
+    -- B-02 / CR-001 "two-person": the role split already stops a warehouse
+    -- operator from deciding, but an approver who also raised the request is
+    -- still one person. The request stays PENDING so a different approver can
+    -- take it; CK_APV_APPROVER_DIFFERS is the row-level backstop.
+    IF v_requester IS NOT NULL
+       AND UPPER(TRIM(p_approver)) = UPPER(TRIM(v_requester)) THEN
+      RAISE_APPLICATION_ERROR(-20011,
+        'Approval ' || p_approval_no || ' cannot be decided by its own requester (' ||
+        v_requester || '); a different approver must decide it.');
+    END IF;
+
+    -- Round 5 / legacy upgrade: APPROVED_SCOPE did not exist when the pre-
+    -- round-3 rows were written, and the migration deliberately does not
+    -- backfill it (see sql/05_automation_schema.sql 5.8.1). Such a token
+    -- authorises nothing, so it must not be promotable to APPROVED either.
+    -- Refused here, before the UPDATE, so the caller gets a business error
+    -- instead of the ORA-02293 the NOVALIDATE CK_APV_SCOPE_REQUIRED would
+    -- raise on the row it is about to touch.
+    IF v_action = 'INVENTORY_ADJUST' AND v_scope IS NULL THEN
+      RAISE_APPLICATION_ERROR(-20011,
+        'Approval ' || p_approval_no || ' predates approval-scope binding and names no ' ||
+        'approved adjustment, so it cannot be decided; raise a new request with a ' ||
+        'canonical warehouseCode/itemCode/quantityDelta payload.');
+    END IF;
 
     IF v_status <> 'PENDING' THEN
       RAISE_APPLICATION_ERROR(-20011,
@@ -1081,6 +1184,8 @@ CREATE OR REPLACE PACKAGE BODY ERP_AUTOMATION AS
     v_item_id   NUMBER;
     v_apv_status VARCHAR2(20);
     v_apv_action VARCHAR2(40);
+    v_apv_scope VARCHAR2(120);
+    v_scope      VARCHAR2(120);
     v_new_bal   NUMBER;
   BEGIN
     IF p_qty_delta = 0 OR p_qty_delta IS NULL THEN
@@ -1101,7 +1206,8 @@ CREATE OR REPLACE PACKAGE BODY ERP_AUTOMATION AS
     END;
 
     BEGIN
-      SELECT STATUS, ACTION INTO v_apv_status, v_apv_action
+      SELECT STATUS, ACTION, APPROVED_SCOPE
+        INTO v_apv_status, v_apv_action, v_apv_scope
         FROM APPROVAL_REQUEST
        WHERE APPROVAL_NO = p_approval_no
        FOR UPDATE;
@@ -1120,6 +1226,15 @@ CREATE OR REPLACE PACKAGE BODY ERP_AUTOMATION AS
       RAISE_APPLICATION_ERROR(-20010,
         'Approval ' || p_approval_no || ' must be APPROVED, current status is ' ||
         v_apv_status || '.');
+    END IF;
+
+    -- B-03: the token authorises one adjustment, not a class of them. Without
+    -- this a token approved for -1 executed whatever the caller sent.
+    v_scope := approval_scope(p_wh_code, p_item_code, p_qty_delta);
+    IF v_apv_scope IS NULL OR v_apv_scope <> v_scope THEN
+      RAISE_APPLICATION_ERROR(-20010,
+        'Approval ' || p_approval_no || ' authorises ' || NVL(v_apv_scope, '<no recorded scope>') ||
+        ' and cannot be used for ' || v_scope || '.');
     END IF;
 
     -- Lock/create the stock line, apply the delta, refuse negative balance.

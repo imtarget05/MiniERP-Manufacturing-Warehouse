@@ -19,6 +19,7 @@
   --red: #ef4444; --red-soft: rgba(239,68,68,.12);
   --shadow-sm: 0 1px 2px rgba(0,0,0,.3); --shadow-md: 0 8px 24px rgba(0,0,0,.35);
 }
+* [hidden] { display: none !important; }
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif; }
 body { background: var(--bg-main); color: var(--text-main); height: 100vh; overflow: hidden; }
 .app-layout { display: flex; height: 100vh; }
@@ -100,4 +101,36 @@ body { background: var(--bg-main); color: var(--text-main); height: 100vh; overf
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 @media (max-width: 1000px){ .metrics-grid{grid-template-columns:repeat(2,1fr)} .content-split{grid-template-columns:1fr} .form-grid{grid-template-columns:1fr} }
 @media (max-width: 700px){ body{overflow:auto} .app-layout{flex-direction:column;height:auto} .sidebar{width:100%} .tab-pane{padding:16px} .metrics-grid{grid-template-columns:1fr} }
+
+/* ---- login view --------------------------------------------------------- */
+.login-view { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg-main); }
+.login-card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 8px; padding: 28px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius); box-shadow: var(--shadow-md); }
+.login-card .logo-icon { margin-bottom: 4px; }
+.login-card h1 { font-size: 20px; font-weight: 800; }
+.login-card label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-top: 8px; }
+.login-card input { width: 100%; padding: 10px 12px; font-size: 14px; color: var(--text-main); background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 8px; }
+.login-card input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+.login-card .btn { margin-top: 16px; width: 100%; }
+.form-error { margin-top: 10px; padding: 8px 10px; font-size: 12px; color: var(--red); background: var(--red-soft); border: 1px solid var(--red); border-radius: 8px; }
+
+/* ---- controlled empty / unavailable states ------------------------------ */
+.empty-state { padding: 18px; font-size: 13px; color: var(--text-muted); text-align: center; }
+.stock-row.danger { border-left-color: var(--red) !important; }
+.stock-row.ok { border-left-color: var(--green) !important; }
+.label-pre { white-space: pre-wrap; word-break: break-word; font-size: 11px; padding: 10px; background: var(--bg-main); border-radius: 8px; }
+.form-actions { display: flex; align-items: flex-end; gap: 8px; }
+.badge { background: var(--bg-main); color: var(--text-muted); }
+
+/* ---- no horizontal overflow on a phone ---------------------------------- */
+@media (max-width: 700px) {
+  .app-layout { flex-direction: column; height: auto; }
+  .main-content { overflow-x: hidden; }
+  .metrics-grid, .content-split, .form-grid { grid-template-columns: 1fr; }
+  .section-toolbar { flex-direction: column; align-items: stretch; }
+  .toolbar-actions { justify-content: flex-start; }
+  .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .data-table { min-width: 560px; }
+  .form-actions { flex-wrap: wrap; }
+  .stock-row { flex-direction: column; gap: 4px; }
+}
 @media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms!important;transition-duration:.001ms!important} }

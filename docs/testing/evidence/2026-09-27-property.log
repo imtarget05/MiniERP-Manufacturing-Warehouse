@@ -1,0 +1,4 @@
+# Session log 2026-09-27 — MiniERP property slice (pointer; full output in oracle-free log)
+
+`dotnet test --filter "FullyQualifiedName~TraceabilityProperty"` → 3/3 passed (534 ms).
+See `2026-09-27-oracle-free.log`.

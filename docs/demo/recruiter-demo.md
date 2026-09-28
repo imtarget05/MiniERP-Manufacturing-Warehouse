@@ -12,11 +12,18 @@
 
 ### Prerequisites Setup (Terminal):
 ```bash
-# 1. Start Oracle Database container
-docker compose up -d oracle-db && bash scripts/start-db.sh
+# 1. Start Oracle Database container under a QA identity (never the production
+#    container/volume names)
+MINIERP_QA_INSTANCE=minierp-qa bash scripts/start-db.sh
 
 # 2. Seed database master data & schema
-bash scripts/run-sql.sh
+# scripts/run-sql.sh can DROP every object of the schema (RESET=1), so
+# scripts/qa-gate.sh must first PROVE the target is a throwaway. Refusals
+# exit 78 having contacted nothing. See docs/operations/backup-restore.md.
+MINIERP_QA_DISPOSABLE=1 MINIERP_QA_INSTANCE=minierp-qa \
+DB_CONTAINER=minierp-qa-oracle APP_USER=erp_user \
+QA_DB_VOLUME=minierp-qa_oracle_data QA_DB_PROJECT=minierp-qa \
+  bash scripts/run-sql.sh
 
 # 3. Start Web API (port 5000)
 bash scripts/start-api.sh &
@@ -211,10 +218,10 @@ curl -s -H "Authorization: Bearer $TOKEN_ADMIN" \
 
 ### Step 7: Automated Tests, CI/CD & Disaster Recovery (1 Minute)
 ```bash
-# 1. Full suite against Oracle (166 tests, 0 failures)
+# 1. Full suite against Oracle (302 tests, 0 failures)
 dotnet test tests/MiniERP.Api.Tests
 
-# 2. DB-free contract suite - runs with no container at all (139 tests)
+# 2. DB-free contract suite - runs with no container at all (247 tests)
 dotnet test tests/MiniERP.Api.Tests --filter "Category!=Integration"
 
 # 3. Traceability E2E acceptance (61 assertions) + backup verification

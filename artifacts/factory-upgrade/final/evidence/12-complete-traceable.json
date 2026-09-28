@@ -1,1 +1,1 @@
-{"success":true,"replayed":false,"fgLot":"FG-E2E23054832021","barcode":"LOT:FG-E2E23054832021","labelEndpoint":"/api/labels?entityType=LOT&entityKey=FG-E2E23054832021","outputWarehouseCode":"WH_FG","message":"Order MO-E2E23054832021 completed traceably."}
+{"success":true,"replayed":false,"fgLot":"FG-E2E1445247467","barcode":"LOT:FG-E2E1445247467","labelEndpoint":"/api/labels?entityType=LOT&entityKey=FG-E2E1445247467","outputWarehouseCode":"WH_FG","message":"Order MO-E2E1445247467 completed traceably."}

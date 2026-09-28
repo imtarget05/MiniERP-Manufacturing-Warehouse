@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using MiniERP.Api.Models;
 using MiniERP.Api.Services;
@@ -49,6 +50,7 @@ public class Phase2RbacTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")] // needs live Oracle (ci-live acceptance)
     public async Task WarehouseRole_CannotCreateProductionOrder()
     {
         await using var factory = new RbacTestFactory();
@@ -70,8 +72,76 @@ public class Phase2RbacTests
         Assert.Equal("AUTH_FORBIDDEN", body.GetProperty("errorCode").GetString());
     }
 
+    // FR-011: the warehouse role keeps its own mutation surface but must not
+    // reach the approval-gated stock adjustment or the admin surface.
+    //
+    // The two ALLOWED endpoints are asserted on the policy map, never over HTTP:
+    // calling them means reaching ERP_TRACEABILITY against whatever schema is
+    // configured, and "not 401/403" is satisfied by a 500 as well - a vacuous
+    // verdict that also made this test a production writer. The real 2xx
+    // behaviour lives in
+    // WarehouseOperator_CanMutateWarehouse_AgainstSeedData_ButNotStockAdjustOrAdmin
+    // (Integration trait, disposable schema only). The two DENIED endpoints stop
+    // inside MutationAuthorizationMiddleware, so their 403 needs no database.
     [Fact]
-    public async Task PlannerRole_CanCreateProductionOrder()
+    [Trait("Category", "Integration")] // needs live Oracle (ci-live acceptance)
+    public async Task WarehouseOperator_CanMutateWarehouse_ButNotStockAdjustOrAdmin()
+    {
+        // Allowed half: the warehouse policy covers the two warehouse mutations
+        // and the admin/stock-adjust surfaces are reserved for ADMIN.
+        Assert.Equal(AuthPolicies.WarehouseMutation,
+            MutationAuthorization.PolicyFor("POST", new PathString("/api/warehouse/putaway")));
+        Assert.Equal(AuthPolicies.WarehouseMutation,
+            MutationAuthorization.PolicyFor("POST", new PathString("/api/warehouse/move")));
+        Assert.Equal(AuthPolicies.AdminOnly,
+            MutationAuthorization.PolicyFor("POST", new PathString("/api/automation/stock/adjust")));
+        Assert.Equal(AuthPolicies.AdminOnly,
+            MutationAuthorization.PolicyFor("POST", new PathString("/api/admin/users")));
+
+        // Denied half: real HTTP, real 403 contract, no handler invocation.
+        await using var factory = new RbacTestFactory();
+        using var client = factory.CreateClient();
+        var token = IssueToken(client, 13, "wh_operator", new[] { ErpRoles.Warehouse });
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var adjust = await client.PostAsJsonAsync("/api/automation/stock/adjust", new
+        {
+            warehouseCode = "WH_RAW",
+            itemCode = "MAT_BOX_01",
+            quantityDelta = -1,
+            approvalNo = "RBAC-WH-1"
+        });
+        using var admin = await client.PostAsJsonAsync("/api/admin/users", new
+        {
+            username = "rbac_wh_created", password = "WhCreated@2026", fullName = "WH", department = "OPS"
+        });
+
+        Assert.Equal(HttpStatusCode.Forbidden, adjust.StatusCode);
+        Assert.Equal("AUTH_FORBIDDEN",
+            (await adjust.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+        Assert.Equal(HttpStatusCode.Forbidden, admin.StatusCode);
+        Assert.Equal("AUTH_FORBIDDEN",
+            (await admin.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+    }
+
+    // Planner may create a production order: the policy map is the no-DB proof,
+    // and the 2xx/RELEASED verdict is proved against seeded data below.
+    [Fact]
+    public void PlannerRole_CanCreateProductionOrder()
+    {
+        var policy = MutationAuthorization.PolicyFor("POST",
+            new PathString("/api/manufacturing/production-order"));
+        Assert.Equal(AuthPolicies.ProductionMutation, policy);
+        Assert.NotEqual(AuthPolicies.AdminOnly, policy);
+        Assert.NotEqual(AuthPolicies.WarehouseMutation, policy);
+    }
+
+    // Requires Oracle: the same two claims as above, but exercised for real
+    // against the seeded disposable schema (Integration trait, never in the
+    // no-database run).
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task PlannerRole_CanCreateProductionOrder_AgainstSeedData()
     {
         await using var factory = new RbacTestFactory();
         using var client = factory.CreateClient();
@@ -80,20 +150,93 @@ public class Phase2RbacTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var poNo = $"PO_PL_{DateTime.UtcNow.Ticks % 1000000}";
-        var response = await client.PostAsJsonAsync("/api/manufacturing/production-order", new
+        using var response = await client.PostAsJsonAsync("/api/manufacturing/production-order", new
         {
             productionOrderNo = poNo,
-            finishedGoodCode = "FG_SHOE_01",
+            // FG_RUNNER_PRO_42 is the finished good seeded by sql/03_seed.sql;
+            // FG_SHOE_01 does not exist, so a foreign key used to turn this call
+            // into a 500 that the old "not 401/403" assertion happily accepted.
+            finishedGoodCode = "FG_RUNNER_PRO_42",
             plannedQuantity = 5,
             warehouseCode = "WH_FG"
         });
 
-        // Authorization succeeds: it must not be 401 or 403
-        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var created = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = created.RootElement;
+        Assert.True(root.GetProperty("success").GetBoolean());
+        Assert.Equal(poNo, root.GetProperty("poNo").GetString());
+        // The endpoint nests the created row under "order" (Program.cs:406).
+        var order = root.GetProperty("order");
+        Assert.Equal(poNo, order.GetProperty("productionOrderNo").GetString());
+        Assert.Equal("RELEASED", order.GetProperty("status").GetString());
+        Assert.Equal("FG_RUNNER_PRO_42", order.GetProperty("finishedGoodCode").GetString());
+        Assert.Equal(5, order.GetProperty("plannedQuantity").GetInt32());
+    }
+
+    // Requires Oracle: the warehouse half of
+    // WarehouseOperator_CanMutateWarehouse_ButNotStockAdjustOrAdmin, exercised
+    // for real. Uses locations that sql/03_seed.sql actually creates, so a 2xx is
+    // a business success instead of a 500 that only "is not 401/403".
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task WarehouseOperator_CanMutateWarehouse_AgainstSeedData_ButNotStockAdjustOrAdmin()
+    {
+        await using var factory = new RbacTestFactory();
+        using var client = factory.CreateClient();
+        var token = IssueToken(client, 13, "wh_operator_seed", new[] { ErpRoles.Warehouse });
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // sql/09_traceability_seed.sql opens MAT_RUBBER_01 as lot OPEN-MAT_RUBBER_01
+        // in WH_RAW / A-01-01, and seeds A-01-02 (WH_RAW) plus LINE-01 (WH_WIP).
+        // Same call shape scripts/test-traceability.sh proves, so a 200 is a real
+        // business success - and the move back restores the seeded position.
+        var run = Guid.NewGuid().ToString("N")[..10];
+        using var putaway = await client.PostAsJsonAsync("/api/warehouse/putaway", new
+        {
+            lotCode = "OPEN-MAT_RUBBER_01",
+            fromLocationCode = "A-01-01",
+            toLocationCode = "A-01-02",
+            qty = 1,
+            idempotencyKey = $"RBAC-WH-PUT-{run}"
+        });
+        using var outMove = await client.PostAsJsonAsync("/api/warehouse/move", new
+        {
+            lotCode = "OPEN-MAT_RUBBER_01",
+            fromWarehouseCode = "WH_RAW",
+            fromLocationCode = "A-01-02",
+            toWarehouseCode = "WH_WIP",
+            toLocationCode = "LINE-01",
+            qty = 1,
+            idempotencyKey = $"RBAC-WH-OUT-{run}"
+        });
+        using var backMove = await client.PostAsJsonAsync("/api/warehouse/move", new
+        {
+            lotCode = "OPEN-MAT_RUBBER_01",
+            fromWarehouseCode = "WH_WIP",
+            fromLocationCode = "LINE-01",
+            toWarehouseCode = "WH_RAW",
+            toLocationCode = "A-01-02",
+            qty = 1,
+            idempotencyKey = $"RBAC-WH-BACK-{run}"
+        });
+
+        foreach (var (name, response) in new[]
+                 {
+                     ("putaway", putaway), ("move-out", outMove), ("move-back", backMove)
+                 })
+        {
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var payload = await response.Content.ReadAsStringAsync();
+            using var body = JsonDocument.Parse(payload);
+            Assert.True(body.RootElement.GetProperty("success").GetBoolean(), $"{name}: {payload}");
+            Assert.False(body.RootElement.GetProperty("replayed").GetBoolean(),
+                $"{name} must be a fresh mutation, not an idempotent replay: {payload}");
+        }
     }
 
     [Fact]
+    [Trait("Category", "Integration")] // needs live Oracle (ci-live acceptance)
     public async Task ExpiredToken_Returns401()
     {
         await using var factory = new RbacTestFactory();
@@ -112,6 +255,7 @@ public class Phase2RbacTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")] // needs live Oracle (ci-live acceptance)
     public async Task MissingToken_Returns401()
     {
         await using var factory = new RbacTestFactory();
@@ -212,8 +356,14 @@ public class Phase2RbacTests
         return tokenService.Issue(new AuthenticatedUser(userId, username, username, "TestDept", roles)).Token;
     }
 
-    private sealed class RbacTestFactory : WebApplicationFactory<Program>
+    // Guarded: see TestOracleDsn. Without an explicit run DSN the host refuses
+    // to start instead of inheriting the real Oracle in src/appsettings.json.
+    private sealed class RbacTestFactory : OracleGuardedWebApplicationFactory
     {
+        public RbacTestFactory() : base(nameof(RbacTestFactory), null)
+        {
+        }
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");

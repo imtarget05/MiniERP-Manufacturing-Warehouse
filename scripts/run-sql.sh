@@ -16,18 +16,50 @@
 #                             -> runs sql/00_reset_schema.sql first; the API must
 #                                be stopped (docker compose stop api) so no session
 #                                holds DML locks, otherwise DROP fails ORA-00054.
+#
+# SAFETY:  RESET=1 runs sql/00_reset_schema.sql, which drops every object in the
+#          schema, and the non-reset load INSERTs the whole seed. Both are
+#          refused unless scripts/qa-gate.sh can PROVE the target is a
+#          throwaway. lib.sh's defaults (minierp-oracle / erp_user) are
+#          production identities, so a load always has to name its target:
+#            MINIERP_QA_DISPOSABLE=1 MINIERP_QA_INSTANCE=<qa-run-id> \
+#            DB_CONTAINER=<qa-container> APP_USER=<qa-schema> bash scripts/run-sql.sh
+#          ... --gate-check   print the resolved identity, contact nothing
+# EXIT:    0 loaded, 1 the load failed, 78 refused (nothing was contacted)
 # ============================================================================
 set -uo pipefail
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+QA_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Captured BEFORE lib.sh substitutes its defaults, so the gate can tell an
+# explicit target from an inherited production one.
+DB_CONTAINER_IN="${DB_CONTAINER:-}"
+APP_USER_IN="${APP_USER:-}"
+QA_DB_VOLUME_IN="${QA_DB_VOLUME:-}"
+QA_DB_PROJECT_IN="${QA_DB_PROJECT:-}"
+
+source "$QA_HERE/lib.sh"
+# shellcheck source=scripts/qa-gate.sh
+source "$QA_HERE/qa-gate.sh"
 
 WITH_INCIDENT=0
 for arg in "$@"; do
   case "$arg" in
     --with-incident) WITH_INCIDENT=1 ;;
+    --gate-check) : ;;   # already consumed by qa_gate_parse_args
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option: $arg (try --with-incident)" ;;
   esac
 done
+
+# Database-only script: it loads SQL, it never calls the API. needs_api 0 so an
+# absent BASE_URL cannot drag the verdict down.
+qa_gate_parse_args "run-sql.sh" "$@"
+qa_gate "run-sql.sh" "" 1 0 "$QA_GATE_MODE"
+
+if [ "$DB_CONTAINER" != "$DB_CONTAINER_IN" ] || [ "$APP_USER" != "$APP_USER_IN" ]; then
+  err "REFUSED run-sql.sh: the authorised target ($DB_CONTAINER_IN/$APP_USER_IN) is not the one this run would use ($DB_CONTAINER/$APP_USER)."
+  exit 78
+fi
 
 rule
 printf '%b\n' "${C_B} Loading the Mini ERP database${C_0}"

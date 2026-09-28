@@ -14,7 +14,7 @@
 | **01:15** | 1.1 | Extract final legacy inventory CSV: `data/legacy_inventory.csv`. | Migration Lead | MD5 checksum recorded | [x] |
 | **01:30** | 2.0 | Take host VM snapshot and freeze production storage volume. | DevOps | Snapshot ID: `snap-prod-20260928` | [x] |
 | **01:45** | 2.1 | Start Oracle Database Free container (`docker compose up -d oracle-db`). | Lead DBA | `docker inspect` healthy | [x] |
-| **02:00** | 2.2 | Execute DDL schema migrations: `bash scripts/run-sql.sh`. | Lead DBA | 31 tables, 3 packages VALID | [x] |
+| **02:00** | 2.2 | Execute DDL schema migrations: `bash scripts/run-sql.sh` under `MINIERP_QA_LIVE_SMOKE='i-have-a-change-window'` (it is gated by `scripts/qa-gate.sh`; a refusal exits 78 before any I/O). | Lead DBA | 31 tables, 3 packages VALID | [x] |
 | **02:30** | 3.0 | Execute legacy data migration: `bash scripts/migrate-legacy-data.sh`. | Migration Lead | `artifacts/migration_reconciliation_*.txt` | [x] |
 | **03:00** | 3.1 | Verify reconciliation balance: Legacy Total = ERP Total ($Delta = 0$). | Internal Audit | Difference = 0 verified | [x] |
 | **03:30** | 4.0 | Build and start API and UI containers (`docker compose up -d api ui`). | DevOps | Containers UP, ports 5000 & 8080 | [x] |

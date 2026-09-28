@@ -11,6 +11,11 @@ public static class MutationAuthorization
             !HttpMethods.IsPatch(method) && !HttpMethods.IsDelete(method)) return null;
         var p = path.Value ?? string.Empty;
         if (!p.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)) return null;
+        // A trailing slash is the same route to the caller, so it must resolve to
+        // the same policy. Without this, "/api/automation/stock/adjust/" skipped
+        // the exact-match admin rule and fell through to the generic
+        // "/api/automation/" operations policy, which WAREHOUSE_OPERATOR passes.
+        p = p.TrimEnd('/');
         if (p.StartsWith("/api/auth/", StringComparison.OrdinalIgnoreCase)) return null;
         if (p.StartsWith("/api/admin/", StringComparison.OrdinalIgnoreCase)) return AuthPolicies.AdminOnly;
         if (p.StartsWith("/api/warehouse/lots/", StringComparison.OrdinalIgnoreCase) &&
@@ -70,12 +75,13 @@ public sealed class MutationAuthorizationMiddleware
             if (context.User.Identity?.IsAuthenticated != true)
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await context.Response.WriteAsJsonAsync(new
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(new
                 {
                     success = false,
                     errorCode = "AUTH_REQUIRED",
                     message = "A bearer token is required for this operation."
-                });
+                }));
                 return;
             }
 
@@ -85,12 +91,13 @@ public sealed class MutationAuthorizationMiddleware
                 _logger.LogWarning("Denied {Method} {Path} for {Actor}", context.Request.Method,
                     context.Request.Path, context.User.Identity?.Name);
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                await context.Response.WriteAsJsonAsync(new
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(new
                 {
                     success = false,
                     errorCode = "AUTH_FORBIDDEN",
                     message = "The authenticated role is not allowed to perform this operation."
-                });
+                }));
                 return;
             }
         }

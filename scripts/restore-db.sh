@@ -3,12 +3,57 @@
 # PROJECT: 04-MiniERP-Manufacturing-Warehouse
 # FILE:    scripts/restore-db.sh
 # PURPOSE: Restore a real Oracle Data Pump backup into a clean local target.
-# SAFETY:  requires both ALLOW_DESTRUCTIVE_RESTORE=true and CONFIRM_RESTORE=yes
-# USAGE:   ALLOW_DESTRUCTIVE_RESTORE=true CONFIRM_RESTORE=yes \
-#            bash scripts/restore-db.sh <backup_dir_or_dump>
+# SAFETY:  three independent locks, all evaluated BEFORE any I/O:
+#            1. scripts/qa-gate.sh - the target identity must be PROVEN to be a
+#               disposable, not merely acknowledged. MINIERP_QA_DISPOSABLE=1 on
+#               its own is refused whenever the target is a production identity
+#               (minierp-oracle, erp_user, the production volume or compose
+#               project), because this script issues DROP USER ... CASCADE and
+#               an impdp with table_exists_action=REPLACE.
+#            2. ALLOW_DESTRUCTIVE_RESTORE=true
+#            3. CONFIRM_RESTORE=yes (or --confirm)
+# USAGE:   the default lib.sh values (DB_CONTAINER=minierp-oracle,
+#            APP_USER=erp_user) are PRODUCTION identities, so a restore always
+#            has to name its target explicitly:
+#              MINIERP_QA_DISPOSABLE=1 MINIERP_QA_INSTANCE=<qa-run-id> \
+#              DB_CONTAINER=<qa-container> APP_USER=<qa-schema> \
+#              ALLOW_DESTRUCTIVE_RESTORE=true CONFIRM_RESTORE=yes \
+#              bash scripts/restore-db.sh <backup_dir_or_dump>
+#            MINIERP_QA_LIVE_SMOKE='i-have-a-change-window' authorises a real
+#            target on purpose, with a banner.
+#            ... --gate-check   print the resolved identity, contact nothing
+# EXIT:    0 restored and verified, 1 the restore itself failed,
+#          78 refused (gate or safety lock) - nothing was contacted
 # ============================================================================
 set -euo pipefail
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+QA_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Operator-supplied only, captured BEFORE lib.sh can invent a default: after
+# sourcing it, DB_CONTAINER is always "minierp-oracle" and APP_USER is always
+# "erp_user", so the gate could not tell an explicit value from an inherited
+# one - and "nobody overrode it" is not evidence of a throwaway.
+DB_CONTAINER_IN="${DB_CONTAINER:-}"
+APP_USER_IN="${APP_USER:-}"
+QA_DB_VOLUME_IN="${QA_DB_VOLUME:-}"
+QA_DB_PROJECT_IN="${QA_DB_PROJECT:-}"
+
+source "$QA_HERE/lib.sh"
+# shellcheck source=scripts/qa-gate.sh
+source "$QA_HERE/qa-gate.sh"
+
+# Authorisation FIRST. This is a database-only script (no API target), and the
+# gate exits 78 without touching the backup argument, the container, sqlplus or
+# impdp when the identity is not a proven throwaway.
+qa_gate_parse_args "restore-db.sh" "$@"
+qa_gate "restore-db.sh" "" 1 0 "$QA_GATE_MODE"
+
+# The gate read the captured values, so the ones the rest of this script uses
+# must still be those values. If anything below re-derives a target, that is a
+# bug, and this stops it silently pointing at the production container.
+if [ "$DB_CONTAINER" != "$DB_CONTAINER_IN" ] || [ "$APP_USER" != "$APP_USER_IN" ]; then
+  err "REFUSED restore-db.sh: the authorised target ($DB_CONTAINER_IN/$APP_USER_IN) is not the one this run would use ($DB_CONTAINER/$APP_USER)."
+  exit 78
+fi
 
 CONFIRM="${CONFIRM_RESTORE:-no}"
 ALLOW_DESTRUCTIVE="${ALLOW_DESTRUCTIVE_RESTORE:-no}"
@@ -17,7 +62,7 @@ BACKUP_INPUT=""
 for arg in "$@"; do
   case "$arg" in
     --confirm) CONFIRM="yes" ;;
-    -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --gate-check) : ;;   # already consumed by qa_gate_parse_args
     *) [ -z "$BACKUP_INPUT" ] && BACKUP_INPUT="$arg" || die "Only one backup input is allowed" ;;
   esac
 done
@@ -25,13 +70,15 @@ done
 rule
 printf '%b\n' "${C_B} MiniERP Database Restore Utility${C_0}"
 rule
+# 78 (EX_CONFIG), not 1: a lock that refuses before any I/O is a refusal to
+# proceed, not a failed operation, and the two must be distinguishable in a log.
 [ "$ALLOW_DESTRUCTIVE" = "true" ] || {
   err "SAFETY LOCK: set ALLOW_DESTRUCTIVE_RESTORE=true to permit destructive restore."
-  exit 1
+  exit 78
 }
 [ "$CONFIRM" = "yes" ] || {
   err "SAFETY LOCK: set CONFIRM_RESTORE=yes or pass --confirm."
-  exit 1
+  exit 78
 }
 [ -n "$BACKUP_INPUT" ] || die "Missing backup directory or .dmp file."
 [ -e "$BACKUP_INPUT" ] || die "Backup path does not exist: $BACKUP_INPUT"

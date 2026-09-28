@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.OpenApi.Models;
 using MiniERP.Api;
 using MiniERP.Api.Models;
 using MiniERP.Api.Services;
@@ -34,6 +35,16 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Core REST API connecting ASP.NET Core (.NET 8) to Oracle Database " +
                       "19c/21c/23c through the PL/SQL packages (Dapper micro-ORM)."
     });
+    c.AddSecurityDefinition(SwaggerAuthOperationFilter.SchemeName, new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "Access token issued by POST /api/auth/login."
+    });
+    c.OperationFilter<SwaggerAuthOperationFilter>();
 });
 
 builder.Services.AddHttpContextAccessor();
@@ -78,6 +89,19 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
 var app = builder.Build();
 
 app.UseMiddleware<CorrelationIdMiddleware>();
+// ---- Minimal Prometheus helper (additive; zero new dependencies) ------------
+// In-memory per-request counters for unauthenticated GET /metrics below
+// (standard Prometheus scrape endpoint). Registered first so every request —
+// including rejected ones — is counted. No existing route, auth, or response
+// shape is changed.
+var metricsStart = DateTimeOffset.UtcNow;
+var httpRequestsTotal = new System.Collections.Concurrent.ConcurrentDictionary<string, long>(StringComparer.Ordinal);
+app.Use(async (context, next) =>
+{
+    await next();
+    var key = $"{context.Request.Method} {context.Request.Path} {context.Response.StatusCode}";
+    httpRequestsTotal.AddOrUpdate(key, 1, (_, v) => v + 1);
+});
 app.UseCors();
 app.UseAuthentication();
 app.UseMiddleware<AuditMiddleware>();
@@ -297,6 +321,74 @@ app.MapGet("/api/health/details", async (ErpDbService db) =>
 .RequireAuthorization(AuthPolicies.SupportDetails)
 .WithName("HealthDetails")
 .WithTags("Support");
+
+// Prometheus text exposition for observability/prometheus. Unauthenticated by
+// design (scrapers carry no session cookie) and contains ONLY aggregate gauges:
+// DB reachability + process uptime. Never lot quantities, never customer data.
+// (http_requests_total below is fed by the counting middleware near the top;
+// process uptime shares the same metricsStart origin.)
+var lastDbProbeTime = DateTimeOffset.MinValue;
+int cachedDbUp = 0;
+var probeLock = new SemaphoreSlim(1, 1);
+
+app.MapGet("/metrics", async (ErpDbService db) =>
+{
+    // DEF-ERP-001 remediation: Cache DB probe for 10s with 2s timeout budget
+    // to prevent Oracle dictionary lock contention and Prometheus scrape timeouts under load.
+    if (DateTimeOffset.UtcNow - lastDbProbeTime > TimeSpan.FromSeconds(10))
+    {
+        if (await probeLock.WaitAsync(50))
+        {
+            try
+            {
+                if (DateTimeOffset.UtcNow - lastDbProbeTime > TimeSpan.FromSeconds(10))
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    var probeTask = db.ProbeAsync();
+                    if (await Task.WhenAny(probeTask, Task.Delay(2000, cts.Token)) == probeTask)
+                    {
+                        await probeTask;
+                        cachedDbUp = 1;
+                    }
+                    else
+                    {
+                        cachedDbUp = 0;
+                    }
+                    lastDbProbeTime = DateTimeOffset.UtcNow;
+                }
+            }
+            catch (Exception)
+            {
+                cachedDbUp = 0;
+                lastDbProbeTime = DateTimeOffset.UtcNow;
+            }
+            finally
+            {
+                probeLock.Release();
+            }
+        }
+    }
+
+    var sb = new System.Text.StringBuilder();
+    sb.AppendLine("# TYPE minierp_db_up gauge");
+    sb.AppendLine($"minierp_db_up {cachedDbUp}");
+    sb.AppendLine("# TYPE minierp_process_up gauge");
+    sb.AppendLine("minierp_process_up 1");
+    sb.AppendLine("# HELP minierp_uptime_seconds Process uptime in seconds.");
+    sb.AppendLine("# TYPE minierp_uptime_seconds gauge");
+    sb.AppendLine($"minierp_uptime_seconds {(DateTimeOffset.UtcNow - metricsStart).TotalSeconds:F2}");
+    sb.AppendLine("# HELP http_requests_total Total HTTP requests by route and status.");
+    sb.AppendLine("# TYPE http_requests_total counter");
+    foreach (var kv in httpRequestsTotal.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+    {
+        var parts = kv.Key.Split(' ');
+        sb.AppendLine($"http_requests_total{{method=\"{parts[0]}\",route=\"{parts[1]}\",status=\"{parts[2]}\"}} {kv.Value}");
+    }
+    return Results.Text(sb.ToString(), "text/plain; version=0.0.4; charset=utf-8");
+})
+.WithName("PrometheusMetrics")
+.WithTags("Support");
+
 
 // ==========================================
 // 1. Warehouse & Inventory endpoints
