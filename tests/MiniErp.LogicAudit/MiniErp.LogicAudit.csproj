@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <MiniERPRoot>$(MSBuildThisFileDirectory)../..</MiniERPRoot>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- The audit project compiles ONLY the pure logic files. It deliberately
+         does not reference the API project: doing so would drag in Program.cs,
+         the Oracle data source and the test DSN guard, and every assertion here
+         is about functions that touch no database. -->
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Only the DB-free helper is compiled. MutationAuthorization.cs needs
+         Microsoft.AspNetCore.Http types, and pulling in the ASP.NET framework
+         reference just to reach it would also drag the web host surface into
+         the audit. RBAC over HTTP is covered by the main suite when a DSN is
+         granted; this project covers the pure ordering and hashing rules. -->
+    <Compile Include="$(MiniERPRoot)/src/Services/TraceabilityLogic.cs" />
+  </ItemGroup>
+</Project>
