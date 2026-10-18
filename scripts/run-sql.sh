@@ -92,7 +92,7 @@ if [ "${RESET:-0}" = "1" ]; then
   rm -f "$tmp"
 fi
 
-FILES=(01_schema.sql 05_automation_schema.sql 07_traceability_schema.sql 02_plsql.sql 06_automation_plsql.sql 08_traceability_plsql.sql 03_seed.sql 09_traceability_seed.sql 10_helpdesk_schema.sql 11_rbac_seed.sql)
+FILES=(01_schema.sql 05_automation_schema.sql 07_traceability_schema.sql 02_plsql.sql 06_automation_plsql.sql 08_traceability_plsql.sql 03_seed.sql 09_traceability_seed.sql 10_helpdesk_schema.sql 11_rbac_seed.sql 12_integration_outbox_schema.sql)
 [ "$WITH_INCIDENT" = "1" ] && FILES+=(04_incident_scenarios.sql)
 
 mkdir -p "$ARTIFACT_DIR"
