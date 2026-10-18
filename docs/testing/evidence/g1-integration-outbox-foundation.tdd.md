@@ -22,8 +22,12 @@ workflows.
 
 ## Coverage and gap
 
-The two contract tests protect repository wiring, not Oracle execution. Oracle
-integration coverage is deliberately blocked until a disposable QA instance is
-available. The required next proof is an Oracle test for JSON/check/unique
-constraints and a transaction rollback test after G3 creates a caller-owned
-boundary.
+The non-integration suite was collected with `XPlat Code Coverage`: 226 tests
+passed, with aggregate line coverage 14.88% and branch coverage 33.43%. This
+does **not** satisfy an 80% coverage target, so G1 makes no such claim; a large
+part of the API is purposely exercised only through Oracle integration tests.
+The two new contract tests protect repository wiring, not Oracle execution.
+Oracle integration coverage is deliberately blocked until a disposable QA
+instance is available. The required next proof is an Oracle test for
+JSON/check/unique constraints and a transaction rollback test after G3 creates
+a caller-owned boundary.
