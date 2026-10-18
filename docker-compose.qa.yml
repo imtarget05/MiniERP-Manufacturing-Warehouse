@@ -23,3 +23,11 @@
 services:
   oracle-db:
     container_name: ${QA_CONTAINER_NAME:-minierp-qa-oracle}
+
+# The base compose file names oracle_data as an external production volume.
+# Override both attributes here so the QA profile can only create/use its own
+# disposable volume under the QA compose project.
+volumes:
+  oracle_data:
+    name: ${QA_DB_VOLUME:-minierp-qa_oracle_data}
+    external: false
